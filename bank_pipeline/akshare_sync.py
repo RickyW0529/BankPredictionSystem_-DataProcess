@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 from .cleaner import DataCleaner
+from .engineer import handle_spring_festival_split
 
 # 频率映射
 FREQ_MAP = {
@@ -500,6 +501,102 @@ MACRO_CATALOG: List[Dict] = [
         "date_col": "月份",
         "columns": [],
     },
+    {
+        "id": "agricultural_product",
+        "name": "农产品价格",
+        "freq": "daily",
+        "func": "macro_china_agricultural_product",
+        "date_col": "日期",
+        "columns": [],
+    },
+    {
+        "id": "au_report",
+        "name": "贵金属报告",
+        "freq": "daily",
+        "func": "macro_china_au_report",
+        "date_col": "日期",
+        "columns": [],
+    },
+    {
+        "id": "construction_price_index",
+        "name": "建筑业价格指数",
+        "freq": "daily",
+        "func": "macro_china_construction_price_index",
+        "date_col": "日期",
+        "columns": [],
+    },
+    {
+        "id": "cpi_monthly",
+        "name": "CPI月度报告（商品维度）",
+        "freq": "monthly",
+        "func": "macro_china_cpi_monthly",
+        "date_col": "日期",
+        "columns": [],
+    },
+    {
+        "id": "cx_services_pmi",
+        "name": "财新服务业PMI",
+        "freq": "monthly",
+        "func": "macro_china_cx_services_pmi_yearly",
+        "date_col": "日期",
+        "columns": [],
+    },
+    {
+        "id": "daily_energy",
+        "name": "沿海六大电煤炭数据",
+        "freq": "daily",
+        "func": "macro_china_daily_energy",
+        "date_col": "日期",
+        "columns": [],
+    },
+    {
+        "id": "foreign_exchange_gold",
+        "name": "外汇储备与黄金",
+        "freq": "monthly",
+        "func": "macro_china_foreign_exchange_gold",
+        "date_col": "统计时间",
+        "columns": [],
+    },
+    {
+        "id": "insurance_business",
+        "name": "保险业经营数据",
+        "freq": "monthly",
+        "func": "macro_china_insurance",
+        "date_col": "统计时间",
+        "columns": [],
+    },
+    {
+        "id": "new_house_price",
+        "name": "新建商品住宅价格指数",
+        "freq": "monthly",
+        "func": "macro_china_new_house_price",
+        "date_col": "日期",
+        "columns": [],
+    },
+    {
+        "id": "pmi_yearly",
+        "name": "PMI年度数据",
+        "freq": "yearly",
+        "func": "macro_china_pmi_yearly",
+        "date_col": "日期",
+        "columns": [],
+    },
+    {
+        "id": "supply_of_money",
+        "name": "货币供应量（另一口径）",
+        "freq": "monthly",
+        "func": "macro_china_supply_of_money",
+        "date_col": "统计时间",
+        "columns": [],
+    },
+    {
+        "id": "yw_electronic",
+        "name": "义乌电子指数",
+        "freq": "daily",
+        "func": "macro_china_yw_electronic_index",
+        "date_col": "日期",
+        "columns": [],
+    },
 ]
 
 logger = logging.getLogger(__name__)
@@ -559,7 +656,11 @@ def _fetch_data(func_name: str, date_col: str) -> Optional[pd.DataFrame]:
 
 
 def get_macro_data(
-    macro_id: str, use_cache: bool = True, cache_dir: str = "./.akshare_cache"
+    macro_id: str,
+    use_cache: bool = True,
+    cache_dir: str = "./.akshare_cache",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> Optional[pd.DataFrame]:
     """Get macro data by id, with optional caching."""
     meta = next((item for item in MACRO_CATALOG if item["id"] == macro_id), None)
@@ -568,6 +669,7 @@ def get_macro_data(
         return None
 
     cache_path = Path(cache_dir) / f"{macro_id}.csv"
+    df = None
     if use_cache and cache_path.exists():
         logger.info("Cache hit for %s, reading from %s", macro_id, cache_path)
         try:
@@ -575,20 +677,33 @@ def get_macro_data(
             df["指标名称"] = pd.to_datetime(df["指标名称"], errors="coerce")
             df = df.dropna(subset=["指标名称"])
             df = df.sort_values(by="指标名称", ascending=True)
-            return df
         except Exception as e:
             logger.warning("Failed to read cache for %s: %s", macro_id, e)
+            df = None
 
-    logger.info("Fetching %s from akshare...", macro_id)
-    df = _fetch_data(meta["func"], meta["date_col"])
-    if df is not None and use_cache:
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            df.to_csv(cache_path, index=False)
-            logger.info("Saved cache for %s to %s", macro_id, cache_path)
-        except Exception as e:
-            logger.warning("Failed to save cache for %s: %s", macro_id, e)
-    return df
+    if df is None:
+        logger.info("Fetching %s from akshare...", macro_id)
+        df = _fetch_data(meta["func"], meta["date_col"])
+        if df is not None and use_cache:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                df.to_csv(cache_path, index=False)
+                logger.info("Saved cache for %s to %s", macro_id, cache_path)
+            except Exception as e:
+                logger.warning("Failed to save cache for %s: %s", macro_id, e)
+
+    if df is None or df.empty:
+        return None
+
+    # Apply date range filter (now applies to both cached and fresh data)
+    if start_date:
+        start_dt = pd.to_datetime(start_date)
+        df = df[df["指标名称"] >= start_dt]
+    if end_date:
+        end_dt = pd.to_datetime(end_date)
+        df = df[df["指标名称"] <= end_dt]
+
+    return df.reset_index(drop=True)
 
 
 def search_macros(keyword: str = "") -> List[Dict]:
@@ -608,11 +723,13 @@ def merge_selected_macros(
     selected_ids: List[str],
     output_path: str = "./output/akshare_merged.csv",
     missing_value_threshold: float = 20.0,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> Tuple[Optional[pd.DataFrame], Dict]:
     """Fetch and merge selected macro indicators."""
     metadata = {
-        "selected": len(selected_ids),
-        "fetched": 0,
+        "selected": selected_ids,
+        "fetched": [],
         "failed": [],
         "output": output_path,
         "shape": None,
@@ -629,7 +746,7 @@ def merge_selected_macros(
             metadata["failed"].append(macro_id)
             continue
 
-        df = get_macro_data(macro_id)
+        df = get_macro_data(macro_id, start_date=start_date, end_date=end_date)
         if df is None or df.empty:
             metadata["failed"].append(macro_id)
             continue
@@ -657,8 +774,14 @@ def merge_selected_macros(
         if rename_map:
             df = df.rename(columns=rename_map)
 
+        # Apply spring festival split for daily/monthly data
+        if meta["freq"] in ("daily", "monthly"):
+            df = df.set_index("指标名称")
+            df = handle_spring_festival_split(df)
+            df = df.reset_index()
+
         data_list.append((df, "指标名称", meta["freq"]))
-        metadata["fetched"] += 1
+        metadata["fetched"].append(macro_id)
 
     if not data_list:
         logger.error("No data fetched for selected ids: %s", selected_ids)
