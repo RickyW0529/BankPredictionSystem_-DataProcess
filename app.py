@@ -59,7 +59,7 @@ def find_data_files(data_dir: str) -> list:
 
 
 # Page navigation
-page = st.sidebar.radio("页面", ["本地数据处理", "AkShare 宏观数据同步"])
+page = st.sidebar.radio("页面", ["本地数据处理", "AkShare 宏观数据同步", "Tushare 宏观数据补充"])
 
 # ===== Sidebar: Configuration =====
 st.sidebar.title("⚙️ 参数配置")
@@ -77,7 +77,7 @@ end_date = st.sidebar.date_input("结束日期", value=pd.to_datetime("today"))
 st.sidebar.markdown("---")
 st.sidebar.info(
     "💡 **提示**：本地数据处理页：将数据文件放入 `raw_data` 文件夹中然后点击【开始处理】。"
-    "AkShare 页：搜索并勾选需要的宏观数据指标，然后点击【下载合并后的月度数据】。"
+    "AkShare/Tushare 页：搜索并勾选需要的宏观数据指标，然后点击【下载合并后的月度数据】。"
 )
 
 if page == "本地数据处理":
@@ -280,3 +280,145 @@ elif page == "AkShare 宏观数据同步":
 
     st.markdown("---")
     st.caption("数据来源于 AkShare 开源财经数据接口")
+
+elif page == "Tushare 宏观数据补充":
+    st.title("📡 Tushare 宏观数据补充")
+    st.markdown("从 Tushare Pro 搜索、勾选、预览宏观数据，一键合并导出")
+
+    from bank_pipeline.tushare_sync import (
+        search_tushare,
+        get_tushare_data,
+        merge_tushare_selected,
+        test_api_connection,
+        FREQ_MAP as TUSHARE_FREQ_MAP,
+    )
+
+    # API Configuration
+    st.header("🔑 API 配置")
+    token_col, btn_col = st.columns([3, 1])
+    with token_col:
+        tushare_token = st.text_input(
+            "Tushare API Token",
+            value="",
+            type="password",
+            help="请输入您的 Tushare Pro API Token",
+        )
+        tushare_api_url = st.text_input(
+            "API 地址",
+            value="http://tsy.xiaodefa.cn",
+            help="自定义 API 地址，如无特殊需求保持默认",
+        )
+    with btn_col:
+        st.write("")
+        st.write("")
+        if st.button("🧪 测试连接", use_container_width=True):
+            if not tushare_token:
+                st.error("请先输入 Token")
+            else:
+                with st.spinner("测试中..."):
+                    is_valid, msg = test_api_connection(tushare_token, tushare_api_url)
+                if is_valid:
+                    st.success(f"✅ {msg}")
+                    st.session_state.tushare_api_ready = True
+                else:
+                    st.error(f"❌ {msg}")
+                    st.session_state.tushare_api_ready = False
+
+    api_ready = st.session_state.get("tushare_api_ready", False)
+    if not tushare_token:
+        api_ready = False
+        st.info("请输入 Tushare API Token 并测试连接")
+    elif not api_ready:
+        st.info("请输入 Token 后点击【测试连接】以启用数据操作")
+
+    # Search
+    st.header("🔍 搜索宏观数据")
+    search_col, _ = st.columns([2, 1])
+    with search_col:
+        tushare_keyword = st.text_input("输入关键词搜索（如 CPI、GDP、M2）", value="", key="tushare_search")
+
+    tushare_results = search_tushare(tushare_keyword)
+    st.caption(f"找到 {len(tushare_results)} 个数据指标")
+
+    # Selection table
+    st.header("📋 数据列表")
+
+    if "selected_tushare" not in st.session_state:
+        st.session_state.selected_tushare = set()
+
+    cols_per_row = 2
+    for i in range(0, len(tushare_results), cols_per_row):
+        row_items = tushare_results[i:i + cols_per_row]
+        cols = st.columns(cols_per_row)
+        for col, item in zip(cols, row_items):
+            with col:
+                checked = item["id"] in st.session_state.selected_tushare
+                freq_label = TUSHARE_FREQ_MAP.get(item["freq"], item["freq"])
+                disabled = not api_ready
+                if st.checkbox(
+                    f"**{item['name']}**  ({freq_label})",
+                    value=checked,
+                    key=f"tushare_chk_{item['id']}",
+                    disabled=disabled,
+                ):
+                    st.session_state.selected_tushare.add(item["id"])
+                else:
+                    st.session_state.selected_tushare.discard(item["id"])
+
+    # Preview selected
+    tushare_selected = list(st.session_state.selected_tushare)
+    if tushare_selected:
+        st.header(f"✅ 已选择 {len(tushare_selected)} 个指标")
+
+        preview_tabs = st.tabs(
+            [next((r["name"] for r in tushare_results if r["id"] == sid), sid) for sid in tushare_selected]
+        )
+        for tab, sid in zip(preview_tabs, tushare_selected):
+            with tab:
+                with st.spinner("加载中..."):
+                    if api_ready:
+                        df_preview = get_tushare_data(sid, token=tushare_token, api_url=tushare_api_url)
+                    else:
+                        df_preview = None
+                if df_preview is not None and not df_preview.empty:
+                    st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
+                    st.dataframe(df_preview.tail(10), use_container_width=True)
+                else:
+                    st.error("数据加载失败")
+    else:
+        st.info("请在上方勾选需要的数据指标")
+
+    # Merge and export
+    st.header("▶️ 合并导出")
+    merge_disabled = not api_ready or not tushare_selected
+    if st.button(
+        "🚀 下载合并后的月度数据",
+        type="primary",
+        use_container_width=True,
+        disabled=merge_disabled,
+    ):
+        with st.spinner(f"正在同步 {len(tushare_selected)} 个指标的数据..."):
+            merged_df, meta = merge_tushare_selected(
+                tushare_selected,
+                token=tushare_token,
+                api_url=tushare_api_url,
+                output_path="./output/tushare_merged.csv",
+                missing_value_threshold=missing_threshold,
+                start_date=str(start_date),
+                end_date=str(end_date),
+            )
+        if merged_df is not None:
+            st.success(f"✅ 合并完成！{meta['shape'][0]} 行 × {meta['shape'][1]} 列")
+            with open(meta["output"], "rb") as f:
+                st.download_button(
+                    label="⬇️ 下载 CSV",
+                    data=f,
+                    file_name="tushare_merged.csv",
+                    mime="text/csv",
+                )
+            st.dataframe(merged_df.tail(20), use_container_width=True)
+        else:
+            st.error("合并失败，请检查网络或选择的指标")
+
+    st.markdown("---")
+    st.caption("数据来源于 Tushare Pro 财经数据接口")
