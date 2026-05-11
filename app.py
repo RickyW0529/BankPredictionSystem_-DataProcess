@@ -76,71 +76,65 @@ end_date = st.sidebar.date_input("结束日期", value=pd.to_datetime("today"))
 
 st.sidebar.markdown("---")
 st.sidebar.info(
-    "💡 **提示**：本地数据处理页：将数据文件放入 `raw_data` 文件夹中然后点击【开始处理】。"
+    "💡 **提示**：本地数据处理页：上传 CSV/Excel 数据文件后点击【开始处理】。"
     "AkShare/Tushare 页：搜索并勾选需要的宏观数据指标，然后点击【下载合并后的月度数据】。"
 )
 
 if page == "本地数据处理":
-    # ===== Main: Data Preparation =====
     st.title("🏦 银行预测数据处理系统")
-    st.markdown("零命令行操作，放数据 → 点按钮 → 下载结果")
+    st.markdown("上传数据文件 → 点击处理 → 下载结果")
 
     data_dir = "./raw_data"
     output_dir = "./output"
     raw_path = Path(data_dir)
 
-    st.header("📂 数据准备")
+    st.header("📂 数据上传")
 
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        if raw_path.exists():
-            files = find_data_files(data_dir)
-            st.success(f"✅ 检测到 `{data_dir}` 目录，共 {len(files)} 个数据文件")
-            for f in files:
-                st.write(f"- `{f.relative_to('.')}`")
-        else:
-            st.warning(f"⚠️ 未检测到 `{data_dir}` 目录")
-            st.info("请创建 `raw_data` 文件夹，并在其中建立 `daily`、`monthly`、`quarter` 子文件夹存放数据。")
+    uploaded_files = st.file_uploader(
+        "上传数据文件（支持 CSV、Excel）",
+        type=["csv", "xlsx", "xls"],
+        accept_multiple_files=True,
+    )
 
-    with col2:
-        if st.button("📁 打开 raw_data 文件夹"):
-            if raw_path.exists():
-                open_folder(str(raw_path.resolve()))
-            else:
-                raw_path.mkdir(parents=True, exist_ok=True)
-                (raw_path / "daily").mkdir(exist_ok=True)
-                (raw_path / "monthly").mkdir(exist_ok=True)
-                (raw_path / "quarter").mkdir(exist_ok=True)
-                open_folder(str(raw_path.resolve()))
-                st.rerun()
+    if uploaded_files:
+        st.success(f"✅ 已上传 {len(uploaded_files)} 个文件")
+        for f in uploaded_files:
+            st.write(f"- `{f.name}`")
 
-    # Preview data files
-    if raw_path.exists():
-        files = find_data_files(data_dir)
-        if files:
-            st.subheader("数据预览（前5行）")
-            tabs = st.tabs([str(f.relative_to(".")) for f in files])
-            for tab, f in zip(tabs, files):
-                with tab:
-                    df_preview = preview_csv(str(f), nrows=5)
-                    if not df_preview.empty:
-                        st.dataframe(df_preview, use_container_width=True)
+        st.subheader("数据预览（前5行）")
+        tabs = st.tabs([f.name for f in uploaded_files])
+        for tab, f in zip(tabs, uploaded_files):
+            with tab:
+                try:
+                    if f.name.endswith(".csv"):
+                        df_preview = pd.read_csv(f, nrows=5)
                     else:
-                        st.error("无法读取该文件，请检查格式")
+                        df_preview = pd.read_excel(f, nrows=5)
+                    st.dataframe(df_preview, use_container_width=True)
+                except Exception as e:
+                    st.error(f"无法读取该文件: {e}")
+                f.seek(0)
 
-    # ===== Main: Execution =====
     st.header("▶️ 运行处理")
-
     run_clicked = st.button("🚀 开始处理", type="primary", use_container_width=True)
 
     log_container = st.empty()
 
     if run_clicked:
-        if not raw_path.exists() or not find_data_files(data_dir):
-            st.error("❌ 没有找到数据文件，请先把数据放入 raw_data 目录")
+        if not uploaded_files:
+            st.error("❌ 请先上传数据文件")
             st.stop()
 
-        # Build command
+        raw_path.mkdir(parents=True, exist_ok=True)
+        for old_file in raw_path.glob("*"):
+            if old_file.is_file():
+                old_file.unlink()
+
+        for f in uploaded_files:
+            file_path = raw_path / f.name
+            with open(file_path, "wb") as out:
+                out.write(f.getvalue())
+
         cmd = [
             sys.executable, "main.py",
             "--data-dir", data_dir,
@@ -159,7 +153,6 @@ if page == "本地数据处理":
             )
             for line in process.stdout:
                 logs.append(line)
-                # Keep last 80 lines
                 display = "".join(logs[-80:])
                 log_container.text(display)
             process.wait()
@@ -169,7 +162,6 @@ if page == "本地数据处理":
         else:
             st.error(f"❌ 处理失败，返回码: {process.returncode}")
 
-        # Show results
         st.header("📊 处理结果")
         output_path = Path(output_dir)
         if output_path.exists():
