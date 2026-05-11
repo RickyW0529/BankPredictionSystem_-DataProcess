@@ -197,7 +197,14 @@ def merge_tushare_selected(
         keep_cols = ["指标名称"]
         if meta.get("columns"):
             available = [c for c in meta["columns"] if c in df.columns]
-            keep_cols.extend(available)
+            if not available:
+                logger.warning(
+                    "No specified columns found for %s, keeping all numeric", indicator_id
+                )
+                numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+                keep_cols.extend([c for c in numeric_cols if c != "指标名称"])
+            else:
+                keep_cols.extend(available)
         else:
             numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
             keep_cols.extend([c for c in numeric_cols if c != "指标名称"])
@@ -227,8 +234,12 @@ def merge_tushare_selected(
     merged_df = cleaner.merge_dataframes(data_list)
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    merged_df.to_csv(output_path, index=False)
-    logger.info("Merged data saved to %s", output_path)
+    try:
+        merged_df.to_csv(output_path, index=False)
+        logger.info("Merged data saved to %s", output_path)
+    except Exception as e:
+        logger.error("Failed to save merged data to %s: %s", output_path, e)
+        metadata["save_error"] = str(e)
 
     metadata["shape"] = merged_df.shape
     return merged_df, metadata
