@@ -26,3 +26,4 @@ output/
 
 # Streamlit
 .streamlit/
+.worktrees/
