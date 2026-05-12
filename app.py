@@ -60,7 +60,7 @@ def find_data_files(data_dir: str) -> list:
 
 
 def _render_indicator_selector(results, selected_key, freq_map, prefix, disabled=False):
-    """Render grouped indicator selector with select-all/clear/invert."""
+    """Render grouped indicator selector with select-all/clear."""
 
     # Group by frequency
     grouped = defaultdict(list)
@@ -76,38 +76,30 @@ def _render_indicator_selector(results, selected_key, freq_map, prefix, disabled
         "unknown": "📁 其他指标",
     }
 
-    # Stats metric
-    if selected_key not in st.session_state:
-        st.session_state[selected_key] = set()
-    selected_set = st.session_state[selected_key]
+    # Single source of truth: read selected state directly from checkbox widget keys
+    selected_set = set()
+    for item in results:
+        chk_key = f"{prefix}_chk_{item['id']}"
+        if st.session_state.get(chk_key, False):
+            selected_set.add(item["id"])
+
+    # Sync back to canonical session_state key so downstream code can read it
+    st.session_state[selected_key] = selected_set
+
     total_results = len(results)
     st.metric("已选 / 总计", f"{len(selected_set)} / {total_results}")
 
-    # Batch controls
-    col1, col2, col3 = st.columns(3)
+    # Batch controls: select all / clear only
+    col1, col2 = st.columns(2)
     with col1:
         if st.button("✅ 全选", key=f"{prefix}_select_all", use_container_width=True, disabled=disabled):
             for item in results:
-                st.session_state[selected_key].add(item["id"])
-            for item in results:
-                st.session_state.pop(f"{prefix}_chk_{item['id']}", None)
+                st.session_state[f"{prefix}_chk_{item['id']}"] = True
             st.rerun()
     with col2:
         if st.button("❌ 清空", key=f"{prefix}_clear_all", use_container_width=True, disabled=disabled):
             for item in results:
-                st.session_state[selected_key].discard(item["id"])
-            for item in results:
-                st.session_state.pop(f"{prefix}_chk_{item['id']}", None)
-            st.rerun()
-    with col3:
-        if st.button("🔄 反选", key=f"{prefix}_invert", use_container_width=True, disabled=disabled):
-            for item in results:
-                if item["id"] in st.session_state[selected_key]:
-                    st.session_state[selected_key].discard(item["id"])
-                else:
-                    st.session_state[selected_key].add(item["id"])
-            for item in results:
-                st.session_state.pop(f"{prefix}_chk_{item['id']}", None)
+                st.session_state[f"{prefix}_chk_{item['id']}"] = False
             st.rerun()
 
     # Grouped expanders
@@ -124,17 +116,12 @@ def _render_indicator_selector(results, selected_key, freq_map, prefix, disabled
                 cols = st.columns(cols_per_row)
                 for col, item in zip(cols, row_items):
                     with col:
-                        checked = item["id"] in st.session_state[selected_key]
                         freq_label = freq_map.get(item["freq"], item["freq"])
-                        if st.checkbox(
+                        st.checkbox(
                             f"**{item['name']}**  ({freq_label})",
-                            value=checked,
                             key=f"{prefix}_chk_{item['id']}",
                             disabled=disabled,
-                        ):
-                            st.session_state[selected_key].add(item["id"])
-                        else:
-                            st.session_state[selected_key].discard(item["id"])
+                        )
 
 
 # Page navigation
