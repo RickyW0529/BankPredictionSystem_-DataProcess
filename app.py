@@ -601,10 +601,17 @@ elif page == "Tushare 宏观数据同步":
 
 elif page == "同花顺 iFinD 宏观数据同步":
     st.title("📡 同花顺 iFinD 宏观数据同步")
-    st.markdown("从 iFinD HTTP API 拉取数据，或上传导出的 Excel/CSV 文件")
+    st.markdown("从 iFinD HTTP API 搜索、勾选、预览宏观数据，一键合并导出；或上传导出的 Excel/CSV 文件")
 
-    from bank_pipeline.ifind_sync import IFindClient
+    from bank_pipeline.ifind_sync import (
+        search_ifind,
+        get_ifind_data,
+        merge_ifind_selected,
+        IFindClient,
+        FREQ_MAP as IFIND_FREQ_MAP,
+    )
     from bank_pipeline.ifind_parser import parse_ifind_excel, parse_yyyymmdd_date
+    from bank_pipeline.akshare_sync import detect_data_frequency
 
     IFIND_API_FREQ_MAP = {
         "day": "daily",
@@ -651,7 +658,36 @@ elif page == "同花顺 iFinD 宏观数据同步":
     elif not api_ready:
         st.info("请输入 Token 后点击【测试连接】以启用数据操作")
 
-    # File upload section
+    # Catalog search and selection
+    st.header("🔍 搜索宏观数据")
+    search_col, _ = st.columns([2, 1])
+    with search_col:
+        ifind_keyword = st.text_input("输入关键词搜索（如 CPI、GDP、PMI）", value="", key="ifind_search")
+
+    ifind_results = [{**r} for r in search_ifind(ifind_keyword)]
+
+    # Apply runtime-validated frequencies if available
+    validated_freqs = st.session_state.get("validated_freqs", {})
+    for r in ifind_results:
+        if r["id"] in validated_freqs:
+            r["freq"] = validated_freqs[r["id"]]
+
+    st.caption(f"找到 {len(ifind_results)} 个数据指标")
+
+    # Selection table
+    st.header("📋 数据列表")
+
+    if "selected_ifind_catalog" not in st.session_state:
+        st.session_state.selected_ifind_catalog = set()
+
+    _render_indicator_selector(
+        ifind_results, "selected_ifind_catalog", IFIND_FREQ_MAP, "ifind_catalog", disabled=not api_ready
+    )
+
+    # Preview selected catalog items
+    ifind_catalog_selected = list(st.session_state.selected_ifind_catalog)
+
+    # File upload section (alternative source)
     st.header("📂 或上传 iFinD 导出文件")
     uploaded_files = st.file_uploader(
         "上传 Excel/CSV 文件",
@@ -690,74 +726,136 @@ elif page == "同花顺 iFinD 宏观数据同步":
             except Exception as e:
                 st.error(f"❌ 解析 {f.name} 失败: {e}")
 
-    # API fetch section
-    st.header("🔍 API 指标拉取")
-    indicator_input = st.text_input("输入 iFinD 指标代码（逗号分隔）", value="", help="例如: M0000001,M0000002")
-    freq_input = st.selectbox("频率", ["day", "month", "quarter", "year"], index=1)
+    # Preview selected catalog indicators
+    if ifind_catalog_selected:
+        st.header(f"✅ 已选择 {len(ifind_catalog_selected)} 个指标")
 
-    if indicator_input and st.button("🚀 拉取数据", type="primary", width='stretch', disabled=not api_ready):
-        codes = [c.strip() for c in indicator_input.split(",") if c.strip()]
-        for code in codes:
-            with st.spinner(f"拉取 {code}..."):
-                client = IFindClient(ifind_token)
-                df = client.fetch_history(
-                    code,
-                    start_date=str(start_date).replace("-", ""),
-                    end_date=str(end_date).replace("-", ""),
-                    frequency=freq_input,
+        refresh_disabled = not api_ready
+        if st.button("🔄 重新拉取", key="ifind_refresh", width='stretch', disabled=refresh_disabled):
+            with st.spinner("正在重新拉取数据..."):
+                for sid in ifind_catalog_selected:
+                    get_ifind_data(
+                        sid,
+                        access_token=ifind_token,
+                        frequency="month",
+                        use_cache=False,
+                        start_date=str(start_date),
+                        end_date=str(end_date),
+                    )
+            st.success("✅ 已重新拉取")
+            st.rerun()
+
+        preview_tabs = st.tabs(
+            [next((r["name"] for r in ifind_results if r["id"] == sid), sid) for sid in ifind_catalog_selected]
+        )
+        for tab, sid in zip(preview_tabs, ifind_catalog_selected):
+            with tab:
+                with st.spinner("加载中..."):
+                    if api_ready:
+                        df_preview = get_ifind_data(
+                            sid,
+                            access_token=ifind_token,
+                            frequency="month",
+                            start_date=str(start_date),
+                            end_date=str(end_date),
+                        )
+                    else:
+                        df_preview = None
+                if df_preview is not None and not df_preview.empty:
+                    # Runtime frequency validation
+                    actual_freq = detect_data_frequency(df_preview)
+                    if actual_freq != "unknown":
+                        if "validated_freqs" not in st.session_state:
+                            st.session_state.validated_freqs = {}
+                        st.session_state.validated_freqs[sid] = actual_freq
+
+                    st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
+                    st.dataframe(df_preview.tail(10), width='stretch')
+                else:
+                    st.error("数据加载失败")
+    else:
+        st.info("请在上方勾选需要的数据指标，或上传导出文件")
+
+    # Combine all selectable sources for export
+    all_indicators = parsed_indicators.copy()
+
+    # Merge and export
+    st.header("▶️ 合并导出")
+
+    # Build selected list from all sources
+    export_disabled = not (ifind_catalog_selected or parsed_indicators)
+    if st.button(
+        "🚀 下载合并后的月度数据",
+        type="primary",
+        width='stretch',
+        disabled=export_disabled,
+    ):
+        with st.spinner(f"正在处理数据..."):
+            merged_df = None
+            meta = None
+
+            # Catalog items via API
+            if ifind_catalog_selected:
+                merged_df, meta = merge_ifind_selected(
+                    ifind_catalog_selected,
+                    access_token=ifind_token,
+                    frequency="month",
+                    output_path="./output/ifind_merged.csv",
+                    missing_value_threshold=missing_threshold,
+                    start_date=str(start_date),
+                    end_date=str(end_date),
                 )
-            if df is not None and not df.empty:
-                st.write(f"{code}: {len(df)} 行")
-                st.dataframe(df.tail(10), width='stretch')
-                internal_freq = IFIND_API_FREQ_MAP.get(freq_input, freq_input)
-                parsed_indicators.append({
-                    "id": code,
-                    "name": code,
-                    "freq": internal_freq,
-                    "data": df,
-                })
-            else:
-                st.error(f"❌ {code} 拉取失败")
 
-    # Indicator selector for merged export
+            # File upload items
+            if parsed_indicators:
+                from bank_pipeline.cleaner import DataCleaner
+
+                ifind_selected_files = list(st.session_state.get("selected_ifind", set()))
+                data_list = []
+                for sid in ifind_selected_files:
+                    item = next((p for p in parsed_indicators if p["id"] == sid), None)
+                    if item is None:
+                        continue
+                    df = item["data"].copy()
+                    date_col_candidates = [c for c in df.columns if c in ("指标名称", "时间", "日期")]
+                    date_col = date_col_candidates[0] if date_col_candidates else df.columns[0]
+                    if df[date_col].dtype == object:
+                        df[date_col] = parse_yyyymmdd_date(df[date_col])
+                    data_list.append((df, date_col, item["freq"]))
+
+                if data_list:
+                    cleaner = DataCleaner(missing_value_threshold=missing_threshold)
+                    file_merged_df = cleaner.merge_dataframes(data_list)
+                    if merged_df is not None and not merged_df.empty:
+                        merged_df = merged_df.merge(file_merged_df, on="指标名称", how="outer")
+                    else:
+                        merged_df = file_merged_df
+                    output_path = "./output/ifind_merged.csv"
+                    merged_df.to_csv(output_path, index=False)
+                    meta = {"shape": merged_df.shape, "output": output_path}
+
+            if merged_df is not None:
+                st.success(f"✅ 合并完成！{merged_df.shape[0]} 行 × {merged_df.shape[1]} 列")
+                with open("./output/ifind_merged.csv", "rb") as f:
+                    st.download_button(
+                        label="⬇️ 下载 CSV",
+                        data=f,
+                        file_name="ifind_merged.csv",
+                        mime="text/csv",
+                    )
+                st.dataframe(merged_df.tail(20), width='stretch')
+            else:
+                st.error("合并失败，请检查网络或选择的指标")
+
+    # File upload indicator selector (only if there are uploaded files)
     if parsed_indicators:
-        st.header("📋 选择要导出的指标")
-        catalog = [{"id": p["id"], "name": p["name"], "freq": p["freq"]} for p in parsed_indicators]
+        st.header("📋 选择要导出的上传指标")
+        upload_catalog = [{"id": p["id"], "name": p["name"], "freq": p["freq"]} for p in parsed_indicators]
 
         if "selected_ifind" not in st.session_state:
             st.session_state.selected_ifind = set()
 
-        _render_indicator_selector(catalog, "selected_ifind", {}, "ifind")
-        selected = list(st.session_state.selected_ifind)
-
-        if selected:
-            st.header("▶️ 合并导出")
-            if st.button("🚀 下载合并后的月度数据", type="primary", width='stretch'):
-                from bank_pipeline.cleaner import DataCleaner
-
-                try:
-                    data_list = []
-                    for sid in selected:
-                        item = next((p for p in parsed_indicators if p["id"] == sid), None)
-                        if item is None:
-                            continue
-                        df = item["data"].copy()
-                        date_col_candidates = [c for c in df.columns if c in ("指标名称", "时间", "日期")]
-                        date_col = date_col_candidates[0] if date_col_candidates else df.columns[0]
-                        if df[date_col].dtype == object:
-                            df[date_col] = parse_yyyymmdd_date(df[date_col])
-                        data_list.append((df, date_col, item["freq"]))
-
-                    cleaner = DataCleaner(missing_value_threshold=missing_threshold)
-                    merged_df = cleaner.merge_dataframes(data_list)
-                    output_path = "./output/ifind_merged.csv"
-                    merged_df.to_csv(output_path, index=False)
-                    st.success(f"✅ 合并完成！{merged_df.shape[0]} 行 × {merged_df.shape[1]} 列")
-                    with open(output_path, "rb") as f:
-                        st.download_button("⬇️ 下载 CSV", data=f, file_name="ifind_merged.csv", mime="text/csv")
-                    st.dataframe(merged_df.tail(20), width='stretch')
-                except Exception as e:
-                    st.error(f"合并导出失败: {e}")
+        _render_indicator_selector(upload_catalog, "selected_ifind", IFIND_FREQ_MAP, "ifind")
 
     st.markdown("---")
     st.caption("数据来源于同花顺 iFinD 数据接口")
