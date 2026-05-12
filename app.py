@@ -685,10 +685,12 @@ elif page == "同花顺 iFinD 宏观数据同步":
         if st.session_state.ifind_catalog_hash != catalog_hash:
             st.session_state.ifind_catalog_json = json.dumps(current_catalog, ensure_ascii=False, indent=2)
             st.session_state.ifind_catalog_hash = catalog_hash
+        # Guard for fresh session state
+        if "ifind_catalog_json" not in st.session_state:
+            st.session_state.ifind_catalog_json = json.dumps(current_catalog, ensure_ascii=False, indent=2)
 
         catalog_json = st.text_area(
             "指标配置 JSON",
-            value=st.session_state.ifind_catalog_json,
             height=300,
             key="ifind_catalog_json",
             help="每个指标需包含 id、name、freq、indicator 四个字段。直接编辑后保存即可生效。",
