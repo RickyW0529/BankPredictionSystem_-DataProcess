@@ -74,7 +74,7 @@ def test_api_connection(token: str, api_url: str = "https://api.tushare.pro") ->
             return True, "连接成功"
         return False, "API 返回空数据"
     except Exception as e:
-        return False, f"API 连接失败: {e}"
+        return False, f"API 连接失败 ({api_url}): {e}"
 
 
 def _fetch_tushare_data(pro, func_name: str, date_col: str) -> Optional[pd.DataFrame]:
@@ -174,7 +174,7 @@ def search_tushare(keyword: str = "") -> List[Dict]:
 def merge_tushare_selected(
     selected_ids: List[str],
     token: str,
-    api_url: str = "https://api.tushare.pro",
+    api_url: str = "http://tsy.xiaodefa.cn",
     output_path: str = "./output/tushare_merged.csv",
     missing_value_threshold: float = 20.0,
     start_date: Optional[str] = None,

@@ -390,7 +390,7 @@ elif page == "Tushare 宏观数据同步":
         )
         tushare_api_url = st.text_input(
             "API 地址",
-            value="https://api.tushare.pro",
+            value="http://tsy.xiaodefa.cn",
             help="自定义 API 地址，如无特殊需求保持默认",
         )
     with btn_col:
