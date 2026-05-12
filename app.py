@@ -5,6 +5,7 @@ Usage:
     streamlit run app.py
 """
 
+import json
 import os
 import platform
 import subprocess
@@ -601,7 +602,7 @@ elif page == "Tushare 宏观数据同步":
 
 elif page == "同花顺 iFinD 宏观数据同步":
     st.title("📡 同花顺 iFinD 宏观数据同步")
-    st.markdown("从 iFinD HTTP API 搜索、勾选、预览宏观数据，一键合并导出；或上传导出的 Excel/CSV 文件")
+    st.caption("从 iFinD HTTP API 搜索、勾选、预览宏观数据，一键合并导出")
 
     from bank_pipeline.ifind_sync import (
         search_ifind,
@@ -616,292 +617,231 @@ elif page == "同花顺 iFinD 宏观数据同步":
         save_ifind_token,
         clear_ifind_token,
     )
-    from bank_pipeline.ifind_parser import parse_ifind_excel, parse_yyyymmdd_date
 
-    # API Configuration
-    st.header("🔑 API 配置")
-    saved_token = load_ifind_token()
-    token_col, save_col, test_col = st.columns([3, 1, 1])
-    with token_col:
-        ifind_token = st.text_input(
-            "iFinD Access Token",
-            value=saved_token or "",
-            type="password",
-            help="请输入您的 iFinD Access Token",
-        )
-    with save_col:
-        st.write("")
-        st.write("")
-        if st.button("💾 保存Token", width='stretch'):
-            if ifind_token:
-                save_ifind_token(ifind_token)
-                st.success("Token 已保存")
-            else:
-                st.warning("Token 为空，未保存")
-    with test_col:
-        st.write("")
-        st.write("")
-        if st.button("🧪 测试连接", width='stretch'):
-            if not ifind_token:
-                st.error("请先输入 Token")
-            else:
-                with st.spinner("测试中..."):
-                    client = IFindClient(ifind_token)
-                    is_valid = client.test_connection()
-                if is_valid:
-                    st.success("✅ 连接成功")
-                    st.session_state.ifind_api_ready = True
-                    st.session_state.ifind_last_tested_token = ifind_token
+    # ── API 配置卡片 ──────────────────────────────────────
+    with st.container(border=True):
+        st.markdown("#### 🔑 API 配置")
+        saved_token = load_ifind_token()
+        token_col, save_col, test_col = st.columns([3, 1, 1])
+        with token_col:
+            ifind_token = st.text_input(
+                "iFinD Access Token",
+                value=saved_token or "",
+                type="password",
+                label_visibility="collapsed",
+                placeholder="请输入您的 iFinD Access Token",
+            )
+        with save_col:
+            if st.button("💾 保存Token", use_container_width=True):
+                if ifind_token:
+                    save_ifind_token(ifind_token)
+                    st.toast("Token 已保存", icon="✅")
                 else:
-                    st.error("❌ 连接失败，请检查 Token")
-                    st.session_state.ifind_api_ready = False
+                    st.toast("Token 为空，未保存", icon="⚠️")
+        with test_col:
+            if st.button("🧪 测试连接", use_container_width=True):
+                if not ifind_token:
+                    st.error("请先输入 Token")
+                else:
+                    with st.spinner("测试中..."):
+                        client = IFindClient(ifind_token)
+                        is_valid = client.test_connection()
+                    if is_valid:
+                        st.success("✅ 连接成功")
+                        st.session_state.ifind_api_ready = True
+                        st.session_state.ifind_last_tested_token = ifind_token
+                    else:
+                        st.error("❌ 连接失败，请检查 Token")
+                        st.session_state.ifind_api_ready = False
 
-    api_ready = st.session_state.get("ifind_api_ready", False)
-    last_tested_token = st.session_state.get("ifind_last_tested_token", "")
-    if ifind_token != last_tested_token:
-        api_ready = False
-    if not ifind_token:
-        api_ready = False
-        st.info("请输入 iFinD Access Token 并测试连接")
-    elif not api_ready:
-        st.info("请输入 Token 后点击【测试连接】以启用数据操作")
+        api_ready = st.session_state.get("ifind_api_ready", False)
+        last_tested_token = st.session_state.get("ifind_last_tested_token", "")
+        if ifind_token != last_tested_token:
+            api_ready = False
+        if not ifind_token:
+            api_ready = False
+            st.info("💡 请输入 iFinD Access Token 并测试连接", icon="ℹ️")
+        elif not api_ready:
+            st.info("💡 请输入 Token 后点击【测试连接】以启用数据操作", icon="ℹ️")
 
-    # Indicator catalog management
+    # ── 管理指标配置 ──────────────────────────────────────
     with st.expander("📋 管理指标配置", expanded=False):
         current_catalog = get_ifind_catalog()
         st.markdown(f"当前共 **{len(current_catalog)}** 个指标")
 
         display_df = pd.DataFrame([
-            {"指标名称": c["name"], "指标代码": c["indicator"]}
+            {"指标名称": c["name"], "指标代码": c["indicator"], "频率": c.get("freq", "monthly")}
             for c in current_catalog
         ])
         st.dataframe(display_df, hide_index=True, use_container_width=True)
 
-        st.markdown("**删除指标**")
-        delete_names = st.multiselect(
-            "选择要删除的指标",
-            options=[c["name"] for c in current_catalog],
-            key="ifind_delete_names",
+        st.markdown("---")
+        st.markdown("**✏️ 自定义指标（JSON 格式）**")
+
+        # Initialize or sync textarea content
+        catalog_hash = hash(str(current_catalog))
+        if "ifind_catalog_hash" not in st.session_state:
+            st.session_state.ifind_catalog_hash = None
+        if st.session_state.ifind_catalog_hash != catalog_hash:
+            st.session_state.ifind_catalog_json = json.dumps(current_catalog, ensure_ascii=False, indent=2)
+            st.session_state.ifind_catalog_hash = catalog_hash
+
+        catalog_json = st.text_area(
+            "指标配置 JSON",
+            value=st.session_state.ifind_catalog_json,
+            height=300,
+            key="ifind_catalog_json",
+            help="每个指标需包含 id、name、freq、indicator 四个字段。直接编辑后保存即可生效。",
         )
 
-        st.markdown("**添加指标**")
-        add_col1, add_col2 = st.columns(2)
-        with add_col1:
-            new_name = st.text_input("指标名称", key="ifind_new_name")
-        with add_col2:
-            new_indicator = st.text_input("指标代码（如 M0000001）", key="ifind_new_indicator")
+        # Real-time validation
+        validation_error = None
+        parsed_catalog = None
+        try:
+            parsed_catalog = json.loads(catalog_json)
+            if not isinstance(parsed_catalog, list):
+                validation_error = "JSON 根节点必须是数组 []"
+            else:
+                required_keys = {"id", "name", "freq", "indicator"}
+                for idx, item in enumerate(parsed_catalog):
+                    if not isinstance(item, dict):
+                        validation_error = f"第 {idx + 1} 项必须是对象"
+                        break
+                    missing = required_keys - set(item.keys())
+                    if missing:
+                        validation_error = f"第 {idx + 1} 项缺少字段: {', '.join(missing)}"
+                        break
+        except json.JSONDecodeError as e:
+            validation_error = f"JSON 格式错误: {e.msg} (第 {e.lineno} 行, 第 {e.colno} 列)"
+
+        if validation_error:
+            st.error(f"❌ {validation_error}")
+        else:
+            st.success("✅ JSON 格式正确")
 
         btn_col1, btn_col2, btn_col3 = st.columns(3)
         with btn_col1:
-            if st.button("💾 保存配置", key="ifind_save_catalog"):
-                new_catalog = [c for c in current_catalog if c["name"] not in delete_names]
-                if new_name and new_indicator:
-                    new_id = f"custom_{new_indicator}"
-                    if not any(c["id"] == new_id for c in new_catalog):
-                        new_catalog.append({
-                            "id": new_id,
-                            "name": new_name,
-                            "freq": "monthly",
-                            "indicator": new_indicator,
-                        })
-                save_ifind_catalog(new_catalog)
-                if "selected_ifind_catalog" in st.session_state:
-                    valid_ids = {c["id"] for c in new_catalog}
-                    st.session_state.selected_ifind_catalog = {
-                        sid for sid in st.session_state.selected_ifind_catalog
-                        if sid in valid_ids
-                    }
-                st.success("配置已保存")
-                st.rerun()
+            if st.button("💾 保存配置", key="ifind_save_catalog", use_container_width=True):
+                if validation_error:
+                    st.error("请先修正 JSON 格式错误再保存")
+                else:
+                    save_ifind_catalog(parsed_catalog)
+                    if "selected_ifind_catalog" in st.session_state:
+                        valid_ids = {c["id"] for c in parsed_catalog}
+                        st.session_state.selected_ifind_catalog = {
+                            sid for sid in st.session_state.selected_ifind_catalog
+                            if sid in valid_ids
+                        }
+                    st.toast("配置已保存", icon="✅")
+                    st.rerun()
         with btn_col2:
-            if st.button("🔄 重置为默认", key="ifind_reset_catalog"):
+            if st.button("🔄 重置为默认", key="ifind_reset_catalog", use_container_width=True):
                 reset_ifind_catalog()
                 st.session_state.selected_ifind_catalog = set()
-                st.success("已重置为默认配置")
+                st.toast("已重置为默认配置", icon="🔄")
                 st.rerun()
         with btn_col3:
-            if st.button("🗑️ 清空Token", key="ifind_clear_token_btn"):
+            if st.button("🗑️ 清空Token", key="ifind_clear_token_btn", use_container_width=True):
                 clear_ifind_token()
-                st.success("Token 已清除")
+                st.toast("Token 已清除", icon="🗑️")
                 st.rerun()
 
-    # Catalog search and selection
-    st.header("🔍 搜索宏观数据")
-    search_col, _ = st.columns([2, 1])
-    with search_col:
-        ifind_keyword = st.text_input("输入关键词搜索（如 CPI、GDP、PMI）", value="", key="ifind_search")
+    # ── 搜索与选择 ─────────────────────────────────────────
+    with st.container(border=True):
+        st.markdown("#### 🔍 搜索宏观数据")
+        ifind_keyword = st.text_input(
+            "输入关键词搜索",
+            value="",
+            key="ifind_search",
+            placeholder="如 CPI、GDP、PMI...",
+        )
+        ifind_results = [{**r} for r in search_ifind(ifind_keyword)]
+        st.caption(f"找到 **{len(ifind_results)}** 个数据指标")
 
-    ifind_results = [{**r} for r in search_ifind(ifind_keyword)]
+        if "selected_ifind_catalog" not in st.session_state:
+            st.session_state.selected_ifind_catalog = set()
 
-    st.caption(f"找到 {len(ifind_results)} 个数据指标")
+        _render_indicator_selector(
+            ifind_results, "selected_ifind_catalog", IFIND_FREQ_MAP, "ifind_catalog", disabled=not api_ready
+        )
 
-    # Selection table
-    st.header("📋 数据列表")
-
-    if "selected_ifind_catalog" not in st.session_state:
-        st.session_state.selected_ifind_catalog = set()
-
-    _render_indicator_selector(
-        ifind_results, "selected_ifind_catalog", IFIND_FREQ_MAP, "ifind_catalog", disabled=not api_ready
-    )
-
-    # Preview selected catalog items
+    # ── 预览区域 ───────────────────────────────────────────
     ifind_catalog_selected = list(st.session_state.selected_ifind_catalog)
 
-    # File upload section (alternative source)
-    st.header("📂 或上传 iFinD 导出文件")
-    uploaded_files = st.file_uploader(
-        "上传 Excel/CSV 文件",
-        type=["csv", "xlsx", "xls"],
-        accept_multiple_files=True,
-        key="ifind_uploader",
-    )
-
-    parsed_indicators = []
-    seen_ids = {}
-    if uploaded_files:
-        for f in uploaded_files:
-            try:
-                if f.name.endswith(".csv"):
-                    df_raw = pd.read_csv(f)
-                else:
-                    df_raw = pd.read_excel(f)
-                parsed = parse_ifind_excel(df_raw)
-                for col in parsed["data_cols"]:
-                    base_id = f"{f.name}_{col}"
-                    if base_id in seen_ids:
-                        seen_ids[base_id] += 1
-                        unique_id = f"{base_id}_{seen_ids[base_id]}"
-                    else:
-                        seen_ids[base_id] = 1
-                        unique_id = base_id
-                    parsed_indicators.append({
-                        "id": unique_id,
-                        "name": col,
-                        "freq": parsed["freq"],
-                        "data": parsed["data"][[parsed["date_col"], col]].rename(
-                            columns={parsed["date_col"]: "指标名称", col: col}
-                        ),
-                    })
-                st.success(f"✅ 已解析 {f.name}: {len(parsed['data'])} 行 × {len(parsed['data_cols'])} 列 (频率: {parsed['freq']})")
-            except Exception as e:
-                st.error(f"❌ 解析 {f.name} 失败: {e}")
-
-    # Preview selected catalog indicators
     if ifind_catalog_selected:
-        st.header(f"✅ 已选择 {len(ifind_catalog_selected)} 个指标")
+        with st.container(border=True):
+            st.markdown(f"#### ✅ 已选择 {len(ifind_catalog_selected)} 个指标")
 
-        refresh_disabled = not api_ready
-        if st.button("🔄 重新拉取", key="ifind_refresh", width='stretch', disabled=refresh_disabled):
-            with st.spinner("正在重新拉取数据..."):
-                for sid in ifind_catalog_selected:
-                    get_ifind_data(
-                        sid,
-                        access_token=ifind_token,
-                        use_cache=False,
-                        start_date=str(start_date),
-                        end_date=str(end_date),
-                    )
-            st.success("✅ 已重新拉取")
-            st.rerun()
-
-        preview_tabs = st.tabs(
-            [next((r["name"] for r in ifind_results if r["id"] == sid), sid) for sid in ifind_catalog_selected]
-        )
-        for tab, sid in zip(preview_tabs, ifind_catalog_selected):
-            with tab:
-                with st.spinner("加载中..."):
-                    if api_ready:
-                        df_preview = get_ifind_data(
+            refresh_disabled = not api_ready
+            if st.button("🔄 重新拉取", key="ifind_refresh", disabled=refresh_disabled):
+                with st.spinner("正在重新拉取数据..."):
+                    for sid in ifind_catalog_selected:
+                        get_ifind_data(
                             sid,
                             access_token=ifind_token,
+                            use_cache=False,
                             start_date=str(start_date),
                             end_date=str(end_date),
                         )
+                st.toast("已重新拉取", icon="✅")
+                st.rerun()
+
+            preview_tabs = st.tabs(
+                [next((r["name"] for r in ifind_results if r["id"] == sid), sid) for sid in ifind_catalog_selected]
+            )
+            for tab, sid in zip(preview_tabs, ifind_catalog_selected):
+                with tab:
+                    with st.spinner("加载中..."):
+                        if api_ready:
+                            df_preview = get_ifind_data(
+                                sid,
+                                access_token=ifind_token,
+                                start_date=str(start_date),
+                                end_date=str(end_date),
+                            )
+                        else:
+                            df_preview = None
+                    if df_preview is not None and not df_preview.empty:
+                        st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
+                        st.dataframe(df_preview.tail(10), use_container_width=True)
                     else:
-                        df_preview = None
-                if df_preview is not None and not df_preview.empty:
-                    st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
-                    st.dataframe(df_preview.tail(10), width='stretch')
-                else:
-                    st.error("数据加载失败")
+                        st.error("数据加载失败")
     else:
-        st.info("请在上方勾选需要的数据指标，或上传导出文件")
+        st.info("💡 请在上方勾选需要的数据指标", icon="ℹ️")
 
-    # Merge and export
-    st.header("▶️ 合并导出")
-
-    export_disabled = not (ifind_catalog_selected or parsed_indicators)
-    if st.button(
-        "🚀 下载合并后的月度数据",
-        type="primary",
-        width='stretch',
-        disabled=export_disabled,
-    ):
-        with st.spinner(f"正在处理数据..."):
-            merged_df = None
-            meta = None
-            from bank_pipeline.cleaner import DataCleaner
-
-            # Catalog items via API
-            if ifind_catalog_selected:
-                merged_df, meta = merge_ifind_selected(
-                    ifind_catalog_selected,
-                    access_token=ifind_token,
-                    output_path="./output/ifind_merged.csv",
-                    missing_value_threshold=missing_threshold,
-                    start_date=str(start_date),
-                    end_date=str(end_date),
-                )
-
-            # File upload items
-            if parsed_indicators:
-                ifind_selected_files = list(st.session_state.get("selected_ifind", set()))
-                data_list = []
-                for sid in ifind_selected_files:
-                    item = next((p for p in parsed_indicators if p["id"] == sid), None)
-                    if item is None:
-                        continue
-                    df = item["data"].copy()
-                    date_col_candidates = [c for c in df.columns if c in ("指标名称", "时间", "日期")]
-                    date_col = date_col_candidates[0] if date_col_candidates else df.columns[0]
-                    if df[date_col].dtype == object:
-                        df[date_col] = parse_yyyymmdd_date(df[date_col])
-                    data_list.append((df, date_col, item["freq"]))
-
-                if data_list:
-                    cleaner = DataCleaner(missing_value_threshold=missing_threshold)
-                    file_merged_df = cleaner.merge_dataframes(data_list)
-                    if merged_df is not None and not merged_df.empty:
-                        merged_df = merged_df.merge(file_merged_df, on="指标名称", how="outer")
-                    else:
-                        merged_df = file_merged_df
-                    output_path = "./output/ifind_merged.csv"
-                    merged_df.to_csv(output_path, index=False)
-                    meta = {"shape": merged_df.shape, "output": output_path}
-
-            if merged_df is not None:
-                st.success(f"✅ 合并完成！{merged_df.shape[0]} 行 × {merged_df.shape[1]} 列")
-                with open("./output/ifind_merged.csv", "rb") as f:
-                    st.download_button(
-                        label="⬇️ 下载 CSV",
-                        data=f,
-                        file_name="ifind_merged.csv",
-                        mime="text/csv",
+    # ── 合并导出 ───────────────────────────────────────────
+    with st.container(border=True):
+        st.markdown("#### ▶️ 合并导出")
+        export_disabled = not ifind_catalog_selected
+        if st.button(
+            "🚀 下载合并后的月度数据",
+            type="primary",
+            disabled=export_disabled,
+            use_container_width=True,
+        ):
+            with st.spinner("正在处理数据..."):
+                if ifind_catalog_selected:
+                    merged_df, meta = merge_ifind_selected(
+                        ifind_catalog_selected,
+                        access_token=ifind_token,
+                        output_path="./output/ifind_merged.csv",
+                        missing_value_threshold=missing_threshold,
+                        start_date=str(start_date),
+                        end_date=str(end_date),
                     )
-                st.dataframe(merged_df.tail(20), width='stretch')
-            else:
-                st.error("合并失败，请检查网络或选择的指标")
 
-    # File upload indicator selector (only if there are uploaded files)
-    if parsed_indicators:
-        st.header("📋 选择要导出的上传指标")
-        upload_catalog = [{"id": p["id"], "name": p["name"], "freq": p["freq"]} for p in parsed_indicators]
+                    if merged_df is not None:
+                        st.success(f"✅ 合并完成！{merged_df.shape[0]} 行 × {merged_df.shape[1]} 列")
+                        with open("./output/ifind_merged.csv", "rb") as f:
+                            st.download_button(
+                                label="⬇️ 下载 CSV",
+                                data=f,
+                                file_name="ifind_merged.csv",
+                                mime="text/csv",
+                                use_container_width=True,
+                            )
+                        st.dataframe(merged_df.tail(20), use_container_width=True)
+                    else:
+                        st.error("合并失败，请检查网络或选择的指标")
 
-        if "selected_ifind" not in st.session_state:
-            st.session_state.selected_ifind = set()
-
-        _render_indicator_selector(upload_catalog, "selected_ifind", IFIND_FREQ_MAP, "ifind")
-
-    st.markdown("---")
     st.caption("数据来源于同花顺 iFinD 数据接口")

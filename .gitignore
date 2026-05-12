@@ -20,6 +20,9 @@ pip-log.txt
 # Project specific
 output/
 .akshare_cache/
+.tushare_cache/
+.ifind_cache/
+.ifind_config.json
 
 # Jupyter
 .ipynb_checkpoints/

@@ -2,12 +2,13 @@
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import requests
+
+from . import config as _config
 
 logger = logging.getLogger(__name__)
 
@@ -15,49 +16,27 @@ DEFAULT_BASE_URL = "https://ft.10jqka.com.cn/api/v1"
 
 FREQ_MAP = {"daily": "日度", "monthly": "月度", "quarterly": "季度", "yearly": "年度"}
 
+
+def _load_default_catalog() -> List[Dict]:
+    """Load the built-in indicator catalog from JSON."""
+    if not _config.IFIND_DEFAULT_CATALOG_PATH.exists():
+        logger.warning("Default iFinD catalog not found at %s", _config.IFIND_DEFAULT_CATALOG_PATH)
+        return []
+    try:
+        with open(_config.IFIND_DEFAULT_CATALOG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+        logger.warning("Default catalog %s is not a list, ignoring", _config.IFIND_DEFAULT_CATALOG_PATH)
+        return []
+    except Exception as e:
+        logger.warning("Failed to load default iFinD catalog from %s: %s", _config.IFIND_DEFAULT_CATALOG_PATH, e)
+        return []
+
+
 # Default catalog of common macro indicators for iFinD.
 # Users can override or extend these via `ifind_catalog.json`.
-IFIND_CATALOG: List[Dict] = [
-    {"id": "cpi_yoy", "name": "CPI同比", "freq": "monthly", "indicator": "M0000001"},
-    {"id": "cpi_mom", "name": "CPI环比", "freq": "monthly", "indicator": "M0000002"},
-    {"id": "cpi_accu", "name": "CPI累计同比", "freq": "monthly", "indicator": "M0000003"},
-    {"id": "ppi_yoy", "name": "PPI同比", "freq": "monthly", "indicator": "M0000138"},
-    {"id": "ppi_mom", "name": "PPI环比", "freq": "monthly", "indicator": "M0000139"},
-    {"id": "industrial_yoy", "name": "工业增加值同比", "freq": "monthly", "indicator": "M0000274"},
-    {"id": "industrial_accu", "name": "工业增加值累计同比", "freq": "monthly", "indicator": "M0000275"},
-    {"id": "m0_yoy", "name": "M0同比", "freq": "monthly", "indicator": "M0000091"},
-    {"id": "m1_yoy", "name": "M1同比", "freq": "monthly", "indicator": "M0000092"},
-    {"id": "m2_yoy", "name": "M2同比", "freq": "monthly", "indicator": "M0000093"},
-    {"id": "retail_yoy", "name": "社会消费品零售总额同比", "freq": "monthly", "indicator": "M0001428"},
-    {"id": "retail_accu", "name": "社会消费品零售总额累计同比", "freq": "monthly", "indicator": "M0001429"},
-    {"id": "investment_accu", "name": "固定资产投资累计同比", "freq": "monthly", "indicator": "M0000545"},
-    {"id": "import_yoy", "name": "进口同比", "freq": "monthly", "indicator": "M0000604"},
-    {"id": "export_yoy", "name": "出口同比", "freq": "monthly", "indicator": "M0000605"},
-    {"id": "trade_balance", "name": "贸易差额", "freq": "monthly", "indicator": "M0000607"},
-    {"id": "fx_reserve", "name": "外汇储备", "freq": "monthly", "indicator": "M0001227"},
-    {"id": "pmi_mfg", "name": "制造业PMI", "freq": "monthly", "indicator": "M0009856"},
-    {"id": "pmi_nonmfg", "name": "非制造业PMI", "freq": "monthly", "indicator": "M0009857"},
-    {"id": "pmi_cx", "name": "财新制造业PMI", "freq": "monthly", "indicator": "M0009862"},
-    {"id": "lpr_1y", "name": "LPR(1年)", "freq": "daily", "indicator": "M0009915"},
-    {"id": "lpr_5y", "name": "LPR(5年)", "freq": "daily", "indicator": "M0009916"},
-    {"id": "shibor_overnight", "name": "SHIBOR隔夜", "freq": "daily", "indicator": "M0009898"},
-    {"id": "gdp_yoy", "name": "GDP同比", "freq": "quarterly", "indicator": "M0000272"},
-    {"id": "gdp", "name": "GDP当季值", "freq": "quarterly", "indicator": "M0000271"},
-    {"id": "fdi_yoy", "name": "外商直接投资同比", "freq": "monthly", "indicator": "M0001416"},
-    {"id": "new_credit", "name": "新增人民币贷款", "freq": "monthly", "indicator": "M0001384"},
-    {"id": "shrzgm", "name": "社会融资规模增量", "freq": "monthly", "indicator": "M0001383"},
-    {"id": "house_price_yoy", "name": "70城房价同比", "freq": "monthly", "indicator": "M0001431"},
-    {"id": "house_price_mom", "name": "70城房价环比", "freq": "monthly", "indicator": "M0001432"},
-    {"id": "gold_reserve", "name": "黄金储备", "freq": "monthly", "indicator": "M0001228"},
-    {"id": "unemployment", "name": "城镇调查失业率", "freq": "monthly", "indicator": "M0001430"},
-    {"id": "foreign_debt", "name": "外债余额", "freq": "quarterly", "indicator": "M0001433"},
-    {"id": "electricity", "name": "全社会用电量", "freq": "monthly", "indicator": "M0001434"},
-    {"id": "railway", "name": "铁路货运量", "freq": "monthly", "indicator": "M0001435"},
-    {"id": "logistics", "name": "物流业景气指数", "freq": "monthly", "indicator": "M0001436"},
-]
-
-IFIND_CUSTOM_CATALOG_PATH = os.environ.get("IFIND_CATALOG_PATH", "./ifind_catalog.json")
-IFIND_TOKEN_PATH = Path("./.ifind_config.json")
+IFIND_CATALOG: List[Dict] = _load_default_catalog()
 
 
 def _load_custom_catalog(path: Optional[str] = None) -> List[Dict]:
@@ -65,7 +44,7 @@ def _load_custom_catalog(path: Optional[str] = None) -> List[Dict]:
 
     JSON format: a list of dicts with keys `id`, `name`, `freq`, `indicator`.
     """
-    p = Path(path) if path else Path(IFIND_CUSTOM_CATALOG_PATH)
+    p = Path(path) if path else Path(_config.IFIND_CUSTOM_CATALOG_PATH)
     if not p.exists():
         return []
     try:
@@ -90,7 +69,7 @@ def get_ifind_catalog() -> List[Dict]:
 
 def save_ifind_catalog(catalog: List[Dict]) -> None:
     """Save full indicator catalog to JSON."""
-    p = Path(IFIND_CUSTOM_CATALOG_PATH)
+    p = Path(_config.IFIND_CUSTOM_CATALOG_PATH)
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "w", encoding="utf-8") as f:
         json.dump(catalog, f, ensure_ascii=False, indent=2)
@@ -98,17 +77,17 @@ def save_ifind_catalog(catalog: List[Dict]) -> None:
 
 def reset_ifind_catalog() -> None:
     """Remove user catalog file to restore defaults."""
-    p = Path(IFIND_CUSTOM_CATALOG_PATH)
+    p = Path(_config.IFIND_CUSTOM_CATALOG_PATH)
     if p.exists():
         p.unlink()
 
 
 def load_ifind_token() -> Optional[str]:
     """Load saved access token from config file."""
-    if not IFIND_TOKEN_PATH.exists():
+    if not _config.IFIND_TOKEN_PATH.exists():
         return None
     try:
-        with open(IFIND_TOKEN_PATH, "r", encoding="utf-8") as f:
+        with open(_config.IFIND_TOKEN_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data.get("access_token")
     except Exception:
@@ -118,26 +97,26 @@ def load_ifind_token() -> Optional[str]:
 def save_ifind_token(token: str) -> None:
     """Save access token to config file."""
     config = {}
-    if IFIND_TOKEN_PATH.exists():
+    if _config.IFIND_TOKEN_PATH.exists():
         try:
-            with open(IFIND_TOKEN_PATH, "r", encoding="utf-8") as f:
+            with open(_config.IFIND_TOKEN_PATH, "r", encoding="utf-8") as f:
                 config = json.load(f)
         except Exception:
             pass
     config["access_token"] = token
-    with open(IFIND_TOKEN_PATH, "w", encoding="utf-8") as f:
+    with open(_config.IFIND_TOKEN_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
 
 
 def clear_ifind_token() -> None:
     """Remove saved access token."""
-    if not IFIND_TOKEN_PATH.exists():
+    if not _config.IFIND_TOKEN_PATH.exists():
         return
     try:
-        with open(IFIND_TOKEN_PATH, "r", encoding="utf-8") as f:
+        with open(_config.IFIND_TOKEN_PATH, "r", encoding="utf-8") as f:
             config = json.load(f)
         config.pop("access_token", None)
-        with open(IFIND_TOKEN_PATH, "w", encoding="utf-8") as f:
+        with open(_config.IFIND_TOKEN_PATH, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
@@ -164,7 +143,7 @@ def get_ifind_data(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     use_cache: bool = True,
-    cache_dir: str = "./.ifind_cache",
+    cache_dir: Optional[str] = None,
 ) -> Optional[pd.DataFrame]:
     """Fetch iFinD macro data by catalog ID, with optional caching."""
     catalog = get_ifind_catalog()
@@ -174,7 +153,8 @@ def get_ifind_data(
         return None
 
     indicator = meta["indicator"]
-    cache_path = Path(cache_dir) / f"{indicator_id}_{indicator}.csv"
+    cache_root = Path(cache_dir) if cache_dir else _config.IFIND_CACHE_DIR
+    cache_path = cache_root / f"{indicator_id}_{indicator}.csv"
 
     df = None
     if use_cache and cache_path.exists():

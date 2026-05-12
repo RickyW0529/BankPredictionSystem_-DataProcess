@@ -3,6 +3,17 @@ from pathlib import Path
 from typing import List, Optional
 
 
+# =============================================================================
+# Centralized application file paths
+# =============================================================================
+_MODULE_DIR = Path(__file__).parent.resolve()
+
+IFIND_DEFAULT_CATALOG_PATH = _MODULE_DIR / "ifind_default_catalog.json"
+IFIND_CUSTOM_CATALOG_PATH = Path("./ifind_catalog.json")
+IFIND_TOKEN_PATH = Path("./.ifind_config.json")
+IFIND_CACHE_DIR = Path("./.ifind_cache")
+
+
 @dataclass
 class DataConfig:
     missing_value_threshold: float = 20.0

@@ -124,9 +124,9 @@ def test_search_ifind_by_name():
 
 
 def test_search_ifind_by_indicator():
-    results = search_ifind("M0000001")
+    results = search_ifind("M002826730")
     assert len(results) >= 1
-    assert any(r.get("indicator") == "M0000001" for r in results)
+    assert any(r.get("indicator") == "M002826730" for r in results)
 
 
 def test_search_ifind_no_match():
@@ -163,7 +163,7 @@ def test_get_ifind_catalog_merges_custom(tmp_path, monkeypatch):
     ]
     custom_path.write_text(json.dumps(custom_data), encoding="utf-8")
     monkeypatch.setattr(
-        "bank_pipeline.ifind_sync.IFIND_CUSTOM_CATALOG_PATH", str(custom_path)
+        "bank_pipeline.config.IFIND_CUSTOM_CATALOG_PATH", str(custom_path)
     )
     catalog = get_ifind_catalog()
     merged_ids = {item["id"] for item in catalog}
@@ -183,7 +183,7 @@ def test_get_ifind_data_uses_catalog(mock_client_class):
     mock_client_class.return_value = mock_client
 
     df = get_ifind_data(
-        "cpi_yoy",
+        "CPI_当月同比",
         access_token="test_token",
         use_cache=False,
     )
@@ -191,7 +191,7 @@ def test_get_ifind_data_uses_catalog(mock_client_class):
     assert len(df) == 2
     mock_client.fetch_history.assert_called_once()
     call_args = mock_client.fetch_history.call_args
-    assert call_args.args[0] == "M0000001"
+    assert call_args.args[0] == "M002826730"
 
 
 def test_get_ifind_data_unknown_id():
@@ -211,18 +211,18 @@ def test_merge_ifind_selected(mock_get_data):
     })
 
     merged_df, meta = merge_ifind_selected(
-        ["cpi_yoy", "ppi_yoy"],
+        ["CPI_当月同比", "PPI_当月同比"],
         access_token="test_token",
         output_path="./output/test_ifind_merged.csv",
     )
     assert merged_df is not None
-    assert meta["fetched"] == ["cpi_yoy", "ppi_yoy"]
+    assert meta["fetched"] == ["CPI_当月同比", "PPI_当月同比"]
     assert meta["failed"] == []
 
 
 def test_save_and_load_ifind_catalog(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "bank_pipeline.ifind_sync.IFIND_CUSTOM_CATALOG_PATH", str(tmp_path / "catalog.json")
+        "bank_pipeline.config.IFIND_CUSTOM_CATALOG_PATH", str(tmp_path / "catalog.json")
     )
     catalog = [{"id": "a", "name": "A", "freq": "monthly", "indicator": "M1"}]
     save_ifind_catalog(catalog)
@@ -233,7 +233,7 @@ def test_save_and_load_ifind_catalog(tmp_path, monkeypatch):
 
 def test_reset_ifind_catalog(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "bank_pipeline.ifind_sync.IFIND_CUSTOM_CATALOG_PATH", str(tmp_path / "catalog.json")
+        "bank_pipeline.config.IFIND_CUSTOM_CATALOG_PATH", str(tmp_path / "catalog.json")
     )
     save_ifind_catalog([{"id": "a", "name": "A", "freq": "monthly", "indicator": "M1"}])
     reset_ifind_catalog()
@@ -243,7 +243,7 @@ def test_reset_ifind_catalog(tmp_path, monkeypatch):
 
 def test_load_save_ifind_token(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "bank_pipeline.ifind_sync.IFIND_TOKEN_PATH", tmp_path / "token.json"
+        "bank_pipeline.config.IFIND_TOKEN_PATH", tmp_path / "token.json"
     )
     assert load_ifind_token() is None
     save_ifind_token("my_secret_token")
