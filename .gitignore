@@ -27,3 +27,7 @@ output/
 # Streamlit
 .streamlit/
 .worktrees/
+
+# Reference data (large binary files, keep local only)
+docs/Reference data table/*.xlsx
+docs/Reference data table/*.xls

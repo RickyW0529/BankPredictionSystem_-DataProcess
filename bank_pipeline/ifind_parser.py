@@ -18,6 +18,67 @@ IFIND_FREQ_MAP = {
 }
 
 
+def _detect_date_column_by_content(df: pd.DataFrame, threshold: float = 0.7) -> Optional[str]:
+    """Detect date column by scanning cell contents.
+
+    Skips leading metadata rows (those containing '频率' or '单位'),
+    then checks each column. A column is considered a date column if
+    >= threshold fraction of its non-empty values can be parsed as dates
+    and there are at least 2 unique dates.
+
+    To avoid misclassifying plain numbers as Unix timestamps, generic date
+    parsing is only attempted when values contain date-like characters (-, /, 年, 月).
+    """
+    skip = 0
+    for idx in range(min(3, len(df))):
+        if _looks_like_metadata_row(df.iloc[idx]):
+            skip += 1
+        else:
+            break
+
+    data_df = df.iloc[skip:].copy() if skip > 0 else df.copy()
+    if len(data_df) < 2:
+        data_df = df.copy()
+
+    for col in df.columns:
+        series = data_df[col].astype(str).str.strip()
+        non_empty = series[series != ""]
+        if len(non_empty) < 2:
+            continue
+
+        # Try YYYYMMDD first (most common in iFinD exports)
+        parsed = pd.to_datetime(non_empty, format="%Y%m%d", errors="coerce")
+        valid_ratio = parsed.notna().sum() / len(non_empty)
+        if valid_ratio >= threshold:
+            unique_dates = parsed.dropna().unique()
+            if len(unique_dates) >= 2:
+                return col
+
+        # Try Chinese date formats (e.g. 2026年01月, 2026年01月01日)
+        for fmt in ("%Y年%m月", "%Y年%m月%d日"):
+            parsed_cn = pd.to_datetime(non_empty, format=fmt, errors="coerce")
+            valid_ratio_cn = parsed_cn.notna().sum() / len(non_empty)
+            if valid_ratio_cn >= threshold:
+                unique_dates = parsed_cn.dropna().unique()
+                if len(unique_dates) >= 2:
+                    return col
+
+        # Fallback: generic date parsing, but only if values look like date strings
+        # (contain -, /, or Chinese date characters) to avoid parsing plain numbers
+        date_like = non_empty.str.contains(r"[-/年月]", regex=True, na=False)
+        if date_like.sum() / len(non_empty) < threshold:
+            continue
+
+        parsed_generic = pd.to_datetime(non_empty, errors="coerce")
+        valid_ratio_generic = parsed_generic.notna().sum() / len(non_empty)
+        if valid_ratio_generic >= threshold:
+            unique_dates = parsed_generic.dropna().unique()
+            if len(unique_dates) >= 2:
+                return col
+
+    return None
+
+
 def detect_date_column_ifind(df: pd.DataFrame) -> Optional[str]:
     """Auto-detect the date column in an iFinD DataFrame."""
     if "指标名称" in df.columns:
@@ -25,7 +86,8 @@ def detect_date_column_ifind(df: pd.DataFrame) -> Optional[str]:
     for col in df.columns:
         if col in ("日期", "date", "Date", "时间"):
             return col
-    return None
+    # Fallback: detect by content
+    return _detect_date_column_by_content(df)
 
 
 def parse_yyyymmdd_date(series: pd.Series) -> pd.Series:

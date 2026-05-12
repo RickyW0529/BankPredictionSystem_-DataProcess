@@ -9,6 +9,7 @@ from bank_pipeline.ifind_parser import (
     parse_yyyymmdd_date,
     extract_frequency_from_metadata,
     extract_unit_from_metadata,
+    _detect_date_column_by_content,
 )
 
 
@@ -44,6 +45,54 @@ def test_extract_frequency_daily():
 def test_extract_frequency_quarterly():
     df = pd.DataFrame({"指标名称": ["频率", "单位", "20260101"], "a": ["季", "%", "1.0"]})
     assert extract_frequency_from_metadata(df) == "quarterly"
+
+
+def test_detect_date_column_by_content_yyyymmdd():
+    """When column names are not standard, detect date column by YYYYMMDD content."""
+    df = pd.DataFrame({
+        "A": ["20260101", "20260201", "20260301"],
+        "B": ["1.0", "2.0", "3.0"],
+    })
+    assert _detect_date_column_by_content(df) == "A"
+    assert detect_date_column_ifind(df) == "A"
+
+
+def test_detect_date_column_by_content_standard_date():
+    """Detect standard ISO date strings like 2026-01-01."""
+    df = pd.DataFrame({
+        "col1": ["2026-01-01", "2026-02-01", "2026-03-01"],
+        "col2": ["100", "200", "300"],
+    })
+    assert _detect_date_column_by_content(df) == "col1"
+    assert detect_date_column_ifind(df) == "col1"
+
+
+def test_detect_date_column_by_content_with_metadata():
+    """Content detection should skip metadata rows and find date column."""
+    df = pd.DataFrame({
+        "foo": ["频率", "单位", "20260101", "20260201"],
+        "bar": ["月", "%", "1.0", "2.0"],
+    })
+    assert detect_date_column_ifind(df) == "foo"
+
+
+def test_detect_date_column_by_content_not_numeric():
+    """Plain numeric columns should NOT be mis-detected as dates."""
+    df = pd.DataFrame({
+        "x": [1.0, 2.0, 3.0],
+        "y": [4.0, 5.0, 6.0],
+    })
+    assert _detect_date_column_by_content(df) is None
+
+
+def test_detect_date_column_by_content_chinese_date():
+    """Detect Chinese date format like 2026年01月."""
+    df = pd.DataFrame({
+        "a": ["2026年01月", "2026年02月", "2026年03月"],
+        "b": ["100", "200", "300"],
+    })
+    assert _detect_date_column_by_content(df) == "a"
+    assert detect_date_column_ifind(df) == "a"
 
 
 def test_extract_frequency_no_metadata():
