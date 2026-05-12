@@ -56,11 +56,11 @@ def detect_frequency(df: pd.DataFrame, date_col: str) -> str:
     diffs = dates.sort_values().diff().dropna()
     median_diff = diffs.median().days
     
-    if median_diff <= 1:
+    if median_diff <= 2:
         return 'daily'
-    elif 28 <= median_diff <= 31:
+    elif 20 <= median_diff <= 40:
         return 'monthly'
-    elif 88 <= median_diff <= 93:
+    elif 80 <= median_diff <= 100:
         return 'quarterly'
     else:
         return 'unknown'
