@@ -618,6 +618,10 @@ elif page == "同花顺 iFinD 宏观数据同步":
         clear_ifind_token,
     )
 
+    # Format dates for iFinD API (YYYYMMDD)
+    ifind_start = start_date.strftime("%Y%m%d") if start_date else None
+    ifind_end = end_date.strftime("%Y%m%d") if end_date else None
+
     # ── API 配置卡片 ──────────────────────────────────────
     with st.container(border=True):
         st.markdown("#### 🔑 API 配置")
@@ -776,16 +780,23 @@ elif page == "同花顺 iFinD 宏观数据同步":
 
             refresh_disabled = not api_ready
             if st.button("🔄 重新拉取", key="ifind_refresh", disabled=refresh_disabled):
+                refresh_errors = []
                 with st.spinner("正在重新拉取数据..."):
                     for sid in ifind_catalog_selected:
-                        get_ifind_data(
-                            sid,
-                            access_token=ifind_token,
-                            use_cache=False,
-                            start_date=str(start_date),
-                            end_date=str(end_date),
-                        )
-                st.toast("已重新拉取", icon="✅")
+                        try:
+                            get_ifind_data(
+                                sid,
+                                access_token=ifind_token,
+                                use_cache=False,
+                                start_date=ifind_start,
+                                end_date=ifind_end,
+                            )
+                        except Exception as e:
+                            refresh_errors.append(f"{sid}: {e}")
+                if refresh_errors:
+                    st.error("部分指标拉取失败:\n" + "\n".join(refresh_errors))
+                else:
+                    st.toast("已重新拉取", icon="✅")
                 st.rerun()
 
             preview_tabs = st.tabs(
@@ -795,19 +806,23 @@ elif page == "同花顺 iFinD 宏观数据同步":
                 with tab:
                     with st.spinner("加载中..."):
                         if api_ready:
-                            df_preview = get_ifind_data(
-                                sid,
-                                access_token=ifind_token,
-                                start_date=str(start_date),
-                                end_date=str(end_date),
-                            )
+                            try:
+                                df_preview = get_ifind_data(
+                                    sid,
+                                    access_token=ifind_token,
+                                    start_date=ifind_start,
+                                    end_date=ifind_end,
+                                )
+                            except Exception as e:
+                                df_preview = None
+                                st.error(f"数据加载失败: {e}")
                         else:
                             df_preview = None
                     if df_preview is not None and not df_preview.empty:
                         st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
                         st.dataframe(df_preview.tail(10), use_container_width=True)
-                    else:
-                        st.error("数据加载失败")
+                    elif df_preview is None and api_ready:
+                        pass  # Error already displayed above
     else:
         st.info("💡 请在上方勾选需要的数据指标", icon="ℹ️")
 
@@ -828,8 +843,8 @@ elif page == "同花顺 iFinD 宏观数据同步":
                         access_token=ifind_token,
                         output_path="./output/ifind_merged.csv",
                         missing_value_threshold=missing_threshold,
-                        start_date=str(start_date),
-                        end_date=str(end_date),
+                        start_date=ifind_start,
+                        end_date=ifind_end,
                     )
 
                     if merged_df is not None:

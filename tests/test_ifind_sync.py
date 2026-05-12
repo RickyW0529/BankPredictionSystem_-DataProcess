@@ -69,8 +69,8 @@ def test_fetch_history_api_error(mock_post):
     mock_post.return_value = mock_resp
 
     client = IFindClient(access_token="test_token")
-    df = client.fetch_history(indicator="INVALID")
-    assert df is None
+    with pytest.raises(RuntimeError, match="iFinD API request failed"):
+        client.fetch_history(indicator="INVALID")
 
 
 @patch("bank_pipeline.ifind_sync.requests.post")
@@ -78,8 +78,8 @@ def test_fetch_history_http_error(mock_post):
     mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
     client = IFindClient(access_token="test_token")
-    df = client.fetch_history(indicator="M0000001")
-    assert df is None
+    with pytest.raises(RuntimeError, match="iFinD API request failed for indicator M0000001"):
+        client.fetch_history(indicator="M0000001")
 
 
 @patch("bank_pipeline.ifind_sync.requests.post")

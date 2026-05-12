@@ -171,12 +171,14 @@ def get_ifind_data(
     if df is None:
         logger.info("Fetching %s from iFinD...", indicator_id)
         client = IFindClient(access_token)
-        # iFinD indicator codes encode frequency; always pass a fixed frequency.
+        # Map catalog freq to iFinD API frequency parameter
+        freq_map = {"daily": "day", "monthly": "month", "quarterly": "quarter", "yearly": "year"}
+        api_freq = freq_map.get(meta.get("freq", "monthly"), "day")
         df = client.fetch_history(
             indicator,
             start_date=start_date,
             end_date=end_date,
-            frequency="day",
+            frequency=api_freq,
         )
         if df is not None and use_cache:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -286,7 +288,8 @@ class IFindClient:
             resp.raise_for_status()
             data = resp.json()
             if data.get("code", 0) != 0:
-                logger.warning("iFinD API error: %s", data.get("message", "unknown"))
+                msg = data.get("message", "unknown")
+                logger.warning("iFinD API error: %s", msg)
                 return None
             return data
         except requests.exceptions.RequestException as e:
@@ -325,16 +328,17 @@ class IFindClient:
             payload["end_date"] = end_date
 
         result = self._post("basic_data_service", payload)
-        if result is None or "data" not in result:
-            return None
+        if result is None:
+            raise RuntimeError(f"iFinD API request failed for indicator {indicator}")
+        if "data" not in result:
+            raise RuntimeError(f"iFinD API response missing 'data' field for indicator {indicator}")
 
         data = result["data"]
         table = data.get("table", [])
         header = data.get("header", [])
 
         if not table or not header:
-            logger.warning("Empty data returned for indicator %s", indicator)
-            return None
+            raise RuntimeError(f"iFinD returned empty data for indicator {indicator}")
 
         df = pd.DataFrame(table, columns=header)
 
@@ -357,9 +361,11 @@ class IFindClient:
 
     def test_connection(self) -> bool:
         """Test if the access_token is valid."""
-        # Use a minimal query to verify token
-        result = self._post("basic_data_service", {"indicator": "M0000001", "limit": 1})
-        return result is not None
+        try:
+            result = self._post("basic_data_service", {"indicator": "M0000001", "limit": 1})
+            return result is not None
+        except Exception:
+            return False
 
 
 # Convenience module-level functions for Streamlit integration
