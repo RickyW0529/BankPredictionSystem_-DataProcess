@@ -15,7 +15,7 @@ Usage:
 import argparse
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Tuple
 
 import pandas as pd
 
@@ -51,7 +51,8 @@ def detect_target_frequency(df: pd.DataFrame) -> str:
 
 
 def run_pipeline(
-    data_dir: str,
+    data_dir: Optional[str] = None,
+    data_list: Optional[List[Tuple[pd.DataFrame, str, str]]] = None,
     target_file: Optional[str] = None,
     target_col: str = "y",
     output_dir: str = "./output",
@@ -95,9 +96,13 @@ def run_pipeline(
     logger.info("=" * 50)
 
     logger.info("📂 Step 1: Loading data...")
-    loader = DataLoader(date_columns=settings.pipeline.data_config.date_columns)
 
-    data_list = loader.load_directory(data_dir, recursive=True)
+    if data_list is None:
+        if data_dir is None:
+            raise ValueError("Either data_dir or data_list must be provided")
+        loader = DataLoader(date_columns=settings.pipeline.data_config.date_columns)
+        data_list = loader.load_directory(data_dir, recursive=True)
+
     logger.info(f"   Loaded {len(data_list)} feature files")
 
     logger.info("🧹 Step 2: Cleaning and merging...")
