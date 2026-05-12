@@ -99,9 +99,9 @@ jupyter notebook 特征工程_tsfresh版本.ipynb
 Handles Jan-Feb cumulative values that occur in Chinese macroeconomic data. When January value is 0/NaN but February has a value, splits February value evenly between both months.
 
 ### Frequency Detection (`loader.py:detect_frequency`)
-- Daily: median diff ≤ 1 day
-- Monthly: median diff 28-31 days
-- Quarterly: median diff 88-93 days
+- Daily: median diff ≤ 2 days
+- Monthly: median diff 20-40 days
+- Quarterly: median diff 80-100 days
 
 ## Configuration Defaults
 
