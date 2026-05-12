@@ -609,28 +609,36 @@ elif page == "同花顺 iFinD 宏观数据同步":
         merge_ifind_selected,
         IFindClient,
         FREQ_MAP as IFIND_FREQ_MAP,
+        get_ifind_catalog,
+        save_ifind_catalog,
+        reset_ifind_catalog,
+        load_ifind_token,
+        save_ifind_token,
+        clear_ifind_token,
     )
     from bank_pipeline.ifind_parser import parse_ifind_excel, parse_yyyymmdd_date
-    from bank_pipeline.akshare_sync import detect_data_frequency
-
-    IFIND_API_FREQ_MAP = {
-        "day": "daily",
-        "month": "monthly",
-        "quarter": "quarterly",
-        "year": "yearly",
-    }
 
     # API Configuration
     st.header("🔑 API 配置")
-    token_col, btn_col = st.columns([3, 1])
+    saved_token = load_ifind_token()
+    token_col, save_col, test_col = st.columns([3, 1, 1])
     with token_col:
         ifind_token = st.text_input(
             "iFinD Access Token",
-            value="",
+            value=saved_token or "",
             type="password",
             help="请输入您的 iFinD Access Token",
         )
-    with btn_col:
+    with save_col:
+        st.write("")
+        st.write("")
+        if st.button("💾 保存Token", width='stretch'):
+            if ifind_token:
+                save_ifind_token(ifind_token)
+                st.success("Token 已保存")
+            else:
+                st.warning("Token 为空，未保存")
+    with test_col:
         st.write("")
         st.write("")
         if st.button("🧪 测试连接", width='stretch'):
@@ -658,49 +666,64 @@ elif page == "同花顺 iFinD 宏观数据同步":
     elif not api_ready:
         st.info("请输入 Token 后点击【测试连接】以启用数据操作")
 
-    # Custom indicators input
-    with st.expander("➕ 添加自定义指标（可选）", expanded=False):
-        st.markdown("每行一个，格式：`指标名称：指标代码`，例如 `人民币汇率：M0009915`")
-        custom_input = st.text_area(
-            "自定义指标列表",
-            value="",
-            placeholder="居民消费价格指数同比：M0000001\n工业增加值同比：M0000274",
-            height=120,
-            key="ifind_custom_input",
-        )
-        custom_freq = st.selectbox(
-            "自定义指标默认频率",
-            ["monthly", "daily", "quarterly", "yearly"],
-            index=0,
-            key="ifind_custom_freq",
+    # Indicator catalog management
+    with st.expander("📋 管理指标配置", expanded=False):
+        current_catalog = get_ifind_catalog()
+        st.markdown(f"当前共 **{len(current_catalog)}** 个指标")
+
+        display_df = pd.DataFrame([
+            {"指标名称": c["name"], "指标代码": c["indicator"]}
+            for c in current_catalog
+        ])
+        st.dataframe(display_df, hide_index=True, use_container_width=True)
+
+        st.markdown("**删除指标**")
+        delete_names = st.multiselect(
+            "选择要删除的指标",
+            options=[c["name"] for c in current_catalog],
+            key="ifind_delete_names",
         )
 
-    def _parse_custom_indicators(text: str, freq: str):
-        items = []
-        for line in text.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            # Support separators: ： : = , ，
-            for sep in ("：", ":", "=", ",", "，"):
-                if sep in line:
-                    parts = line.split(sep, 1)
-                    if len(parts) == 2:
-                        name, indicator = parts[0].strip(), parts[1].strip()
-                        if name and indicator:
-                            item_id = f"custom_{indicator}"
-                            items.append({
-                                "id": item_id,
-                                "name": name,
-                                "freq": freq,
-                                "indicator": indicator,
-                            })
-                        break
-        return items
+        st.markdown("**添加指标**")
+        add_col1, add_col2 = st.columns(2)
+        with add_col1:
+            new_name = st.text_input("指标名称", key="ifind_new_name")
+        with add_col2:
+            new_indicator = st.text_input("指标代码（如 M0000001）", key="ifind_new_indicator")
 
-    custom_items = _parse_custom_indicators(custom_input, custom_freq)
-    if custom_items:
-        st.caption(f"已解析 {len(custom_items)} 个自定义指标")
+        btn_col1, btn_col2, btn_col3 = st.columns(3)
+        with btn_col1:
+            if st.button("💾 保存配置", key="ifind_save_catalog"):
+                new_catalog = [c for c in current_catalog if c["name"] not in delete_names]
+                if new_name and new_indicator:
+                    new_id = f"custom_{new_indicator}"
+                    if not any(c["id"] == new_id for c in new_catalog):
+                        new_catalog.append({
+                            "id": new_id,
+                            "name": new_name,
+                            "freq": "monthly",
+                            "indicator": new_indicator,
+                        })
+                save_ifind_catalog(new_catalog)
+                if "selected_ifind_catalog" in st.session_state:
+                    valid_ids = {c["id"] for c in new_catalog}
+                    st.session_state.selected_ifind_catalog = {
+                        sid for sid in st.session_state.selected_ifind_catalog
+                        if sid in valid_ids
+                    }
+                st.success("配置已保存")
+                st.rerun()
+        with btn_col2:
+            if st.button("🔄 重置为默认", key="ifind_reset_catalog"):
+                reset_ifind_catalog()
+                st.session_state.selected_ifind_catalog = set()
+                st.success("已重置为默认配置")
+                st.rerun()
+        with btn_col3:
+            if st.button("🗑️ 清空Token", key="ifind_clear_token_btn"):
+                clear_ifind_token()
+                st.success("Token 已清除")
+                st.rerun()
 
     # Catalog search and selection
     st.header("🔍 搜索宏观数据")
@@ -708,15 +731,7 @@ elif page == "同花顺 iFinD 宏观数据同步":
     with search_col:
         ifind_keyword = st.text_input("输入关键词搜索（如 CPI、GDP、PMI）", value="", key="ifind_search")
 
-    base_results = [{**r} for r in search_ifind(ifind_keyword)]
-    # Merge custom items into results
-    ifind_results = custom_items + base_results
-
-    # Apply runtime-validated frequencies if available
-    validated_freqs = st.session_state.get("validated_freqs", {})
-    for r in ifind_results:
-        if r["id"] in validated_freqs:
-            r["freq"] = validated_freqs[r["id"]]
+    ifind_results = [{**r} for r in search_ifind(ifind_keyword)]
 
     st.caption(f"找到 {len(ifind_results)} 个数据指标")
 
@@ -783,7 +798,6 @@ elif page == "同花顺 iFinD 宏观数据同步":
                     get_ifind_data(
                         sid,
                         access_token=ifind_token,
-                        frequency="month",
                         use_cache=False,
                         start_date=str(start_date),
                         end_date=str(end_date),
@@ -798,34 +812,15 @@ elif page == "同花顺 iFinD 宏观数据同步":
             with tab:
                 with st.spinner("加载中..."):
                     if api_ready:
-                        # Check if this is a custom indicator
-                        custom_meta = next((c for c in custom_items if c["id"] == sid), None)
-                        if custom_meta:
-                            client = IFindClient(ifind_token)
-                            df_preview = client.fetch_history(
-                                custom_meta["indicator"],
-                                start_date=str(start_date).replace("-", ""),
-                                end_date=str(end_date).replace("-", ""),
-                                frequency="month",
-                            )
-                        else:
-                            df_preview = get_ifind_data(
-                                sid,
-                                access_token=ifind_token,
-                                frequency="month",
-                                start_date=str(start_date),
-                                end_date=str(end_date),
-                            )
+                        df_preview = get_ifind_data(
+                            sid,
+                            access_token=ifind_token,
+                            start_date=str(start_date),
+                            end_date=str(end_date),
+                        )
                     else:
                         df_preview = None
                 if df_preview is not None and not df_preview.empty:
-                    # Runtime frequency validation
-                    actual_freq = detect_data_frequency(df_preview)
-                    if actual_freq != "unknown":
-                        if "validated_freqs" not in st.session_state:
-                            st.session_state.validated_freqs = {}
-                        st.session_state.validated_freqs[sid] = actual_freq
-
                     st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
                     st.dataframe(df_preview.tail(10), width='stretch')
                 else:
@@ -833,13 +828,9 @@ elif page == "同花顺 iFinD 宏观数据同步":
     else:
         st.info("请在上方勾选需要的数据指标，或上传导出文件")
 
-    # Combine all selectable sources for export
-    all_indicators = parsed_indicators.copy()
-
     # Merge and export
     st.header("▶️ 合并导出")
 
-    # Build selected list from all sources
     export_disabled = not (ifind_catalog_selected or parsed_indicators)
     if st.button(
         "🚀 下载合并后的月度数据",
@@ -852,52 +843,16 @@ elif page == "同花顺 iFinD 宏观数据同步":
             meta = None
             from bank_pipeline.cleaner import DataCleaner
 
-            # Separate catalog ids and custom ids
-            catalog_ids = [sid for sid in ifind_catalog_selected if not sid.startswith("custom_")]
-            custom_selected = [c for c in custom_items if c["id"] in ifind_catalog_selected]
-
             # Catalog items via API
-            if catalog_ids:
+            if ifind_catalog_selected:
                 merged_df, meta = merge_ifind_selected(
-                    catalog_ids,
+                    ifind_catalog_selected,
                     access_token=ifind_token,
-                    frequency="month",
                     output_path="./output/ifind_merged.csv",
                     missing_value_threshold=missing_threshold,
                     start_date=str(start_date),
                     end_date=str(end_date),
                 )
-
-            # Custom indicators via direct API fetch
-            if custom_selected and api_ready:
-                custom_data_list = []
-                for citem in custom_selected:
-                    client = IFindClient(ifind_token)
-                    df = client.fetch_history(
-                        citem["indicator"],
-                        start_date=str(start_date).replace("-", ""),
-                        end_date=str(end_date).replace("-", ""),
-                        frequency="month",
-                    )
-                    if df is not None and not df.empty:
-                        rename_map = {}
-                        for col in df.columns:
-                            if col != "指标名称":
-                                rename_map[col] = f"{citem['name']}_{col}"
-                        if rename_map:
-                            df = df.rename(columns=rename_map)
-                        custom_data_list.append((df, "指标名称", citem["freq"]))
-
-                if custom_data_list:
-                    cleaner = DataCleaner(missing_value_threshold=missing_threshold)
-                    custom_merged = cleaner.merge_dataframes(custom_data_list)
-                    if merged_df is not None and not merged_df.empty:
-                        merged_df = merged_df.merge(custom_merged, on="指标名称", how="outer")
-                    else:
-                        merged_df = custom_merged
-                    output_path = "./output/ifind_merged.csv"
-                    merged_df.to_csv(output_path, index=False)
-                    meta = {"shape": merged_df.shape, "output": output_path}
 
             # File upload items
             if parsed_indicators:

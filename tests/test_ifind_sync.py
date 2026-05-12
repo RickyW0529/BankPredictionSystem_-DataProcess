@@ -12,8 +12,13 @@ from bank_pipeline.ifind_sync import (
     search_ifind,
     get_ifind_catalog,
     _load_custom_catalog,
+    save_ifind_catalog,
+    reset_ifind_catalog,
     get_ifind_data,
     merge_ifind_selected,
+    load_ifind_token,
+    save_ifind_token,
+    clear_ifind_token,
 )
 
 
@@ -180,7 +185,6 @@ def test_get_ifind_data_uses_catalog(mock_client_class):
     df = get_ifind_data(
         "cpi_yoy",
         access_token="test_token",
-        frequency="month",
         use_cache=False,
     )
     assert df is not None
@@ -209,9 +213,40 @@ def test_merge_ifind_selected(mock_get_data):
     merged_df, meta = merge_ifind_selected(
         ["cpi_yoy", "ppi_yoy"],
         access_token="test_token",
-        frequency="month",
         output_path="./output/test_ifind_merged.csv",
     )
     assert merged_df is not None
     assert meta["fetched"] == ["cpi_yoy", "ppi_yoy"]
     assert meta["failed"] == []
+
+
+def test_save_and_load_ifind_catalog(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "bank_pipeline.ifind_sync.IFIND_CUSTOM_CATALOG_PATH", str(tmp_path / "catalog.json")
+    )
+    catalog = [{"id": "a", "name": "A", "freq": "monthly", "indicator": "M1"}]
+    save_ifind_catalog(catalog)
+    loaded = _load_custom_catalog()
+    assert len(loaded) == 1
+    assert loaded[0]["indicator"] == "M1"
+
+
+def test_reset_ifind_catalog(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "bank_pipeline.ifind_sync.IFIND_CUSTOM_CATALOG_PATH", str(tmp_path / "catalog.json")
+    )
+    save_ifind_catalog([{"id": "a", "name": "A", "freq": "monthly", "indicator": "M1"}])
+    reset_ifind_catalog()
+    loaded = _load_custom_catalog()
+    assert loaded == []
+
+
+def test_load_save_ifind_token(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "bank_pipeline.ifind_sync.IFIND_TOKEN_PATH", tmp_path / "token.json"
+    )
+    assert load_ifind_token() is None
+    save_ifind_token("my_secret_token")
+    assert load_ifind_token() == "my_secret_token"
+    clear_ifind_token()
+    assert load_ifind_token() is None

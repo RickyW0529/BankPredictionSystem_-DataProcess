@@ -57,13 +57,13 @@ IFIND_CATALOG: List[Dict] = [
 ]
 
 IFIND_CUSTOM_CATALOG_PATH = os.environ.get("IFIND_CATALOG_PATH", "./ifind_catalog.json")
+IFIND_TOKEN_PATH = Path("./.ifind_config.json")
 
 
 def _load_custom_catalog(path: Optional[str] = None) -> List[Dict]:
     """Load user-defined indicator catalog from JSON.
 
     JSON format: a list of dicts with keys `id`, `name`, `freq`, `indicator`.
-    User entries override defaults by `id`, and new entries are appended.
     """
     p = Path(path) if path else Path(IFIND_CUSTOM_CATALOG_PATH)
     if not p.exists():
@@ -81,13 +81,66 @@ def _load_custom_catalog(path: Optional[str] = None) -> List[Dict]:
 
 
 def get_ifind_catalog() -> List[Dict]:
-    """Return full catalog (defaults + custom overrides/appends)."""
+    """Return current effective catalog (user config if exists, else defaults)."""
     custom = _load_custom_catalog()
-    merged = {item["id"]: item for item in IFIND_CATALOG}
-    for item in custom:
-        if "id" in item and "indicator" in item:
-            merged[item["id"]] = item
-    return list(merged.values())
+    if custom:
+        return custom
+    return list(IFIND_CATALOG)
+
+
+def save_ifind_catalog(catalog: List[Dict]) -> None:
+    """Save full indicator catalog to JSON."""
+    p = Path(IFIND_CUSTOM_CATALOG_PATH)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(catalog, f, ensure_ascii=False, indent=2)
+
+
+def reset_ifind_catalog() -> None:
+    """Remove user catalog file to restore defaults."""
+    p = Path(IFIND_CUSTOM_CATALOG_PATH)
+    if p.exists():
+        p.unlink()
+
+
+def load_ifind_token() -> Optional[str]:
+    """Load saved access token from config file."""
+    if not IFIND_TOKEN_PATH.exists():
+        return None
+    try:
+        with open(IFIND_TOKEN_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("access_token")
+    except Exception:
+        return None
+
+
+def save_ifind_token(token: str) -> None:
+    """Save access token to config file."""
+    config = {}
+    if IFIND_TOKEN_PATH.exists():
+        try:
+            with open(IFIND_TOKEN_PATH, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except Exception:
+            pass
+    config["access_token"] = token
+    with open(IFIND_TOKEN_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+
+
+def clear_ifind_token() -> None:
+    """Remove saved access token."""
+    if not IFIND_TOKEN_PATH.exists():
+        return
+    try:
+        with open(IFIND_TOKEN_PATH, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        config.pop("access_token", None)
+        with open(IFIND_TOKEN_PATH, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 
 def search_ifind(keyword: str = "") -> List[Dict]:
@@ -110,7 +163,6 @@ def get_ifind_data(
     access_token: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    frequency: str = "day",
     use_cache: bool = True,
     cache_dir: str = "./.ifind_cache",
 ) -> Optional[pd.DataFrame]:
@@ -139,11 +191,12 @@ def get_ifind_data(
     if df is None:
         logger.info("Fetching %s from iFinD...", indicator_id)
         client = IFindClient(access_token)
+        # iFinD indicator codes encode frequency; always pass a fixed frequency.
         df = client.fetch_history(
             indicator,
             start_date=start_date,
             end_date=end_date,
-            frequency=frequency,
+            frequency="day",
         )
         if df is not None and use_cache:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -170,7 +223,6 @@ def get_ifind_data(
 def merge_ifind_selected(
     selected_ids: List[str],
     access_token: str,
-    frequency: str = "day",
     output_path: str = "./output/ifind_merged.csv",
     missing_value_threshold: float = 20.0,
     start_date: Optional[str] = None,
@@ -196,7 +248,6 @@ def merge_ifind_selected(
         df = get_ifind_data(
             indicator_id,
             access_token,
-            frequency=frequency,
             start_date=start_date,
             end_date=end_date,
         )
@@ -212,7 +263,7 @@ def merge_ifind_selected(
         if rename_map:
             df = df.rename(columns=rename_map)
 
-        data_list.append((df, "指标名称", meta["freq"]))
+        data_list.append((df, "指标名称", meta.get("freq", "monthly")))
         metadata["fetched"].append(indicator_id)
 
     if not data_list:
