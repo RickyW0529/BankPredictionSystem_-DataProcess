@@ -541,6 +541,22 @@ MACRO_CATALOG: List[Dict] = [
         "date_col": "日期",
         "columns": [],
     },
+    {
+        "id": "shrzgm",
+        "name": "社会融资规模增量",
+        "freq": "monthly",
+        "func": "macro_china_shrzgm",
+        "date_col": "月份",
+        "columns": ["社会融资规模增量", "其中-人民币贷款", "其中-委托贷款", "其中-信托贷款", "其中-未贴现银行承兑汇票", "其中-企业债券", "其中-非金融企业境内股票融资"],
+    },
+    {
+        "id": "vegetable_basket",
+        "name": "菜篮子产品批发价格指数",
+        "freq": "daily",
+        "func": "macro_china_vegetable_basket",
+        "date_col": "日期",
+        "columns": ["最新值", "涨跌幅", "近3月涨跌幅", "近6月涨跌幅", "近1年涨跌幅", "近2年涨跌幅", "近3年涨跌幅"],
+    },
 ]
 
 logger = logging.getLogger(__name__)
@@ -551,6 +567,10 @@ def _parse_chinese_date(val):
     import re
 
     s = str(val).strip()
+    # 201501 -> 2015-01-01
+    m = re.match(r"^(\d{4})(\d{2})$", s)
+    if m:
+        return pd.Timestamp(f"{m.group(1)}-{m.group(2)}-01")
     # 2026年04月份 -> 2026-04-01
     m = re.match(r"(\d{4})年(\d{2})月份", s)
     if m:
