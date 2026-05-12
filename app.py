@@ -313,11 +313,27 @@ elif page == "AkShare 宏观数据同步":
     if selected:
         st.header(f"✅ 已选择 {len(selected)} 个指标")
 
+        if st.button("🔄 重新拉取", key="akshare_refresh", use_container_width=True):
+            with st.spinner("正在重新拉取数据..."):
+                for sid in selected:
+                    get_macro_data(
+                        sid,
+                        use_cache=False,
+                        start_date=str(start_date),
+                        end_date=str(end_date),
+                    )
+            st.success("✅ 已重新拉取")
+            st.rerun()
+
         preview_tabs = st.tabs([next((r["name"] for r in results if r["id"] == sid), sid) for sid in selected])
         for tab, sid in zip(preview_tabs, selected):
             with tab:
                 with st.spinner("加载中..."):
-                    df_preview = get_macro_data(sid)
+                    df_preview = get_macro_data(
+                        sid,
+                        start_date=str(start_date),
+                        end_date=str(end_date),
+                    )
                 if df_preview is not None and not df_preview.empty:
                     st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
                     st.dataframe(df_preview.tail(10), use_container_width=True)
@@ -427,6 +443,21 @@ elif page == "Tushare 宏观数据同步":
     if tushare_selected:
         st.header(f"✅ 已选择 {len(tushare_selected)} 个指标")
 
+        refresh_disabled = not api_ready
+        if st.button("🔄 重新拉取", key="tushare_refresh", use_container_width=True, disabled=refresh_disabled):
+            with st.spinner("正在重新拉取数据..."):
+                for sid in tushare_selected:
+                    get_tushare_data(
+                        sid,
+                        token=tushare_token,
+                        api_url=tushare_api_url,
+                        use_cache=False,
+                        start_date=str(start_date),
+                        end_date=str(end_date),
+                    )
+            st.success("✅ 已重新拉取")
+            st.rerun()
+
         preview_tabs = st.tabs(
             [next((r["name"] for r in tushare_results if r["id"] == sid), sid) for sid in tushare_selected]
         )
@@ -434,7 +465,13 @@ elif page == "Tushare 宏观数据同步":
             with tab:
                 with st.spinner("加载中..."):
                     if api_ready:
-                        df_preview = get_tushare_data(sid, token=tushare_token, api_url=tushare_api_url)
+                        df_preview = get_tushare_data(
+                            sid,
+                            token=tushare_token,
+                            api_url=tushare_api_url,
+                            start_date=str(start_date),
+                            end_date=str(end_date),
+                        )
                     else:
                         df_preview = None
                 if df_preview is not None and not df_preview.empty:
