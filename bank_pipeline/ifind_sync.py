@@ -276,21 +276,25 @@ class IFindClient:
             "Content-Type": "application/json",
         }
 
-    def _post(self, endpoint: str, payload: Dict) -> Optional[Dict]:
+    def _post(self, endpoint: str, payload: Dict) -> Dict:
         """Send POST request and return JSON response."""
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         try:
             resp = requests.post(url, headers=self._headers, json=payload, timeout=30)
             resp.raise_for_status()
             data = resp.json()
-            if data.get("code", 0) != 0:
+            # Old format: code + message
+            if "code" in data and data["code"] != 0:
                 msg = data.get("message", "unknown")
-                logger.warning("iFinD API error: %s", msg)
-                return None
+                raise RuntimeError(f"iFinD API error: {msg}")
+            # New format: errorcode + errmsg
+            if "errorcode" in data and data["errorcode"] != 0:
+                msg = data.get("errmsg", "unknown")
+                raise RuntimeError(f"iFinD API error ({data['errorcode']}): {msg}")
             return data
         except requests.exceptions.RequestException as e:
             logger.error("iFinD HTTP request failed: %s", e)
-            return None
+            raise RuntimeError(f"iFinD HTTP request failed: {e}")
 
     def fetch_edb(
         self,
@@ -320,15 +324,20 @@ class IFindClient:
             payload["enddate"] = end_date
 
         result = self._post("edb_service", payload)
-        if result is None:
-            raise RuntimeError(f"iFinD API request failed for indicator {indicators}")
-        if "data" not in result:
-            logger.warning("iFinD API response for %s: %s", indicators, json.dumps(result, ensure_ascii=False))
-            raise RuntimeError(f"iFinD API response missing 'data' field for indicator {indicators}. Response keys: {list(result.keys())}")
 
-        data = result["data"]
-        table = data.get("table", [])
-        header = data.get("header", [])
+        # EDB response uses 'tables' instead of 'data'
+        tables = result.get("tables", [])
+        if not tables:
+            raise RuntimeError(f"iFinD returned empty tables for indicator {indicators}")
+
+        first_table = tables[0]
+        if isinstance(first_table, dict):
+            header = first_table.get("header", [])
+            table = first_table.get("table", [])
+        else:
+            # Fallback: tables might be a direct 2D array
+            header = result.get("header", [])
+            table = tables
 
         if not table or not header:
             raise RuntimeError(f"iFinD returned empty data for indicator {indicators}")

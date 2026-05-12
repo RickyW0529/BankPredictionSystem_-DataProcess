@@ -39,14 +39,17 @@ def test_fetch_edb_success(mock_post):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {
-        "code": 0,
-        "data": {
-            "table": [
-                ["2026-01-01", "1.0"],
-                ["2026-02-01", "2.0"],
-            ],
-            "header": ["时间", "CPI"],
-        },
+        "errorcode": 0,
+        "errmsg": "",
+        "tables": [
+            {
+                "table": [
+                    ["2026-01-01", "1.0"],
+                    ["2026-02-01", "2.0"],
+                ],
+                "header": ["时间", "CPI"],
+            }
+        ],
     }
     mock_post.return_value = mock_resp
 
@@ -65,11 +68,11 @@ def test_fetch_edb_success(mock_post):
 def test_fetch_edb_api_error(mock_post):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = {"code": -1, "message": "invalid indicator"}
+    mock_resp.json.return_value = {"errorcode": -4318, "errmsg": "usage exceeded"}
     mock_post.return_value = mock_resp
 
     client = IFindClient(access_token="test_token")
-    with pytest.raises(RuntimeError, match="iFinD API request failed"):
+    with pytest.raises(RuntimeError, match="iFinD API error"):
         client.fetch_edb(indicators="INVALID")
 
 
@@ -78,7 +81,7 @@ def test_fetch_edb_http_error(mock_post):
     mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
     client = IFindClient(access_token="test_token")
-    with pytest.raises(RuntimeError, match="iFinD API request failed for indicator M0000001"):
+    with pytest.raises(RuntimeError, match="iFinD HTTP request failed"):
         client.fetch_edb(indicators="M0000001")
 
 
@@ -86,7 +89,11 @@ def test_fetch_edb_http_error(mock_post):
 def test_test_connection_success(mock_post):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = {"code": 0, "data": {"table": [["2026-01-01", "1.0"]], "header": ["时间", "CPI"]}}
+    mock_resp.json.return_value = {
+        "errorcode": 0,
+        "errmsg": "",
+        "tables": [{"table": [["2026-01-01", "1.0"]], "header": ["时间", "CPI"]}],
+    }
     mock_post.return_value = mock_resp
 
     client = IFindClient(access_token="test_token")
