@@ -10,6 +10,9 @@ from bank_pipeline.ifind_parser import (
     extract_frequency_from_metadata,
     extract_unit_from_metadata,
     _detect_date_column_by_content,
+    fix_column_names,
+    filter_numeric_columns,
+    auto_parse_dataframe,
 )
 
 
@@ -187,3 +190,86 @@ def test_parse_real_daily_spot_price():
     assert result["freq"] in ("daily", "unknown")
     assert len(result["data_cols"]) >= 1
     assert len(result["data"]) > 10
+
+
+def test_fix_column_names_all_default():
+    """When all column names are Unnamed, use first row as names."""
+    df = pd.DataFrame({
+        "Unnamed: 0": ["指标名称", "20260101", "20260201"],
+        "Unnamed: 1": ["CPI同比", "2.5", "2.4"],
+        "Unnamed: 2": ["GDP同比", "5.1", "5.2"],
+    })
+    fixed = fix_column_names(df)
+    assert list(fixed.columns) == ["指标名称", "CPI同比", "GDP同比"]
+    assert len(fixed) == 2
+    assert fixed["指标名称"].iloc[0] == "20260101"
+
+
+def test_fix_column_names_partial_default():
+    """Fix only the default column names, keep valid ones (do not drop row)."""
+    # 4 columns, only 1 is default -> minority, should only fix that one
+    df = pd.DataFrame({
+        "指标名称": ["频率", "20260101", "20260201"],
+        "CPI": ["2.5", "2.6", "2.4"],
+        "GDP": ["5.1", "5.2", "5.3"],
+        "Unnamed: 3": ["备注", "A", "B"],
+    })
+    fixed = fix_column_names(df)
+    assert "指标名称" in fixed.columns
+    assert "CPI" in fixed.columns
+    assert "GDP" in fixed.columns
+    assert "备注" in fixed.columns
+    # First row should be kept because majority columns have real data there
+    assert len(fixed) == 3
+    assert fixed["指标名称"].iloc[0] == "频率"
+
+
+def test_filter_numeric_columns_skips_text():
+    """Non-numeric columns should be filtered out."""
+    df = pd.DataFrame({
+        "日期": pd.to_datetime(["2026-01-01", "2026-02-01", "2026-03-01"]),
+        "CPI": [2.5, 2.4, 2.3],
+        "备注": ["备注A", "备注B", "备注C"],
+        "地区": ["北京", "上海", "广州"],
+    })
+    cols = filter_numeric_columns(df, "日期")
+    assert cols == ["CPI"]
+
+
+def test_filter_numeric_columns_keeps_mixed():
+    """Columns with mostly numeric values should be kept."""
+    df = pd.DataFrame({
+        "日期": pd.to_datetime(["2026-01-01", "2026-02-01", "2026-03-01"]),
+        "CPI": [2.5, 2.4, None],
+        "备注": ["A", "B", "C"],
+    })
+    cols = filter_numeric_columns(df, "日期")
+    assert cols == ["CPI"]
+
+
+def test_auto_parse_dataframe_skips_text_columns():
+    """auto_parse_dataframe should skip text columns and keep numeric ones."""
+    df = pd.DataFrame({
+        "指标名称": ["20260101", "20260201", "20260301"],
+        "CPI": ["2.5", "2.4", "2.3"],
+        "备注": ["A", "B", "C"],
+        "地区": ["北京", "上海", "广州"],
+    })
+    result = auto_parse_dataframe(df)
+    assert result["date_col"] == "指标名称"
+    assert result["data_cols"] == ["CPI"]
+    assert len(result["data"]) == 3
+    assert "备注" not in result["data"].columns
+    assert "地区" not in result["data"].columns
+
+
+def test_auto_parse_dataframe_fixes_default_names():
+    """auto_parse_dataframe should fix default column names and parse."""
+    df = pd.DataFrame({
+        "Unnamed: 0": ["指标名称", "20260101", "20260201"],
+        "Unnamed: 1": ["CPI", "2.5", "2.4"],
+    })
+    result = auto_parse_dataframe(df)
+    assert result["date_col"] == "指标名称"
+    assert result["data_cols"] == ["CPI"]
+    assert len(result["data"]) == 2

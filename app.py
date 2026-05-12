@@ -95,12 +95,12 @@ def _render_indicator_selector(results, selected_key, freq_map, prefix, disabled
     # Batch controls: select all / clear only
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("✅ 全选", key=f"{prefix}_select_all", use_container_width=True, disabled=disabled):
+        if st.button("✅ 全选", key=f"{prefix}_select_all", width='stretch', disabled=disabled):
             for item in results:
                 st.session_state[f"{prefix}_chk_{item['id']}"] = True
             st.rerun()
     with col2:
-        if st.button("❌ 清空", key=f"{prefix}_clear_all", use_container_width=True, disabled=disabled):
+        if st.button("❌ 清空", key=f"{prefix}_clear_all", width='stretch', disabled=disabled):
             for item in results:
                 st.session_state[f"{prefix}_chk_{item['id']}"] = False
             st.rerun()
@@ -157,74 +157,123 @@ if page == "本地数据处理":
 
     st.header("📂 数据上传")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        daily_files = st.file_uploader(
-            "📅 日度数据", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="daily_uploader"
-        )
-    with col2:
-        monthly_files = st.file_uploader(
-            "📆 月度数据", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="monthly_uploader"
-        )
-    with col3:
-        quarterly_files = st.file_uploader(
-            "📊 季度数据", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="quarterly_uploader"
+    auto_detect = st.checkbox("🔍 启用自动识别模式（自动检测日期列、数据列和频率）", value=True)
+
+    if auto_detect:
+        uploaded_files = st.file_uploader(
+            "上传 CSV/Excel 文件（支持多文件，自动识别日期列和数据列）",
+            type=["csv", "xlsx", "xls"],
+            accept_multiple_files=True,
+            key="auto_uploader",
         )
 
-    all_uploaded = daily_files + monthly_files + quarterly_files
+        all_uploaded = uploaded_files
+        parsed_files = []
+        if uploaded_files:
+            from bank_pipeline.ifind_parser import auto_parse_dataframe
 
-    if all_uploaded:
-        st.success(f"✅ 已上传 {len(all_uploaded)} 个文件（日度 {len(daily_files)} / 月度 {len(monthly_files)} / 季度 {len(quarterly_files)}）")
-
-        # Preview
-        st.subheader("数据预览（前5行）")
-        preview_tabs = st.tabs([f.name for f in all_uploaded])
-        for tab, f in zip(preview_tabs, all_uploaded):
-            with tab:
+            for f in uploaded_files:
                 try:
                     if f.name.endswith(".csv"):
-                        df_preview = pd.read_csv(f, nrows=5)
+                        df_raw = pd.read_csv(f)
                     else:
-                        df_preview = pd.read_excel(f, nrows=5)
-                    st.dataframe(df_preview, use_container_width=True)
+                        df_raw = pd.read_excel(f)
+                    result = auto_parse_dataframe(df_raw)
+                    parsed_files.append({
+                        "file": f,
+                        "name": f.name,
+                        "date_col": result["date_col"],
+                        "data_cols": result["data_cols"],
+                        "freq": result["freq"],
+                        "data": result["data"],
+                    })
+                    st.success(
+                        f"✅ {f.name}: 识别到 {len(result['data_cols'])} 个数据列，"
+                        f"频率: {result['freq']}，共 {len(result['data'])} 行"
+                    )
                 except Exception as e:
-                    st.error(f"无法读取该文件: {e}")
-                f.seek(0)
+                    st.error(f"❌ {f.name} 解析失败: {e}")
+
+            if parsed_files:
+                st.subheader("📋 自动识别结果")
+                for pf in parsed_files:
+                    st.write(f"**{pf['name']}**  |  日期列: `{pf['date_col']}`  |  频率: `{pf['freq']}`")
+                    st.write(f"数据列: {', '.join(pf['data_cols'])}")
+                    st.dataframe(pf["data"].head(5), width='stretch')
+
+        # Build data_list for pipeline
+        data_list = []
+        for pf in parsed_files:
+            df = pf["data"].copy()
+            date_col = pf["date_col"]
+            freq = pf["freq"] if pf["freq"] != "unknown" else "monthly"
+            data_list.append((df, date_col, freq))
+    else:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            daily_files = st.file_uploader(
+                "📅 日度数据", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="daily_uploader"
+            )
+        with col2:
+            monthly_files = st.file_uploader(
+                "📆 月度数据", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="monthly_uploader"
+            )
+        with col3:
+            quarterly_files = st.file_uploader(
+                "📊 季度数据", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="quarterly_uploader"
+            )
+
+        all_uploaded = daily_files + monthly_files + quarterly_files
+
+        if all_uploaded:
+            st.success(f"✅ 已上传 {len(all_uploaded)} 个文件（日度 {len(daily_files)} / 月度 {len(monthly_files)} / 季度 {len(quarterly_files)}）")
+
+            # Preview
+            st.subheader("数据预览（前5行）")
+            preview_tabs = st.tabs([f.name for f in all_uploaded])
+            for tab, f in zip(preview_tabs, all_uploaded):
+                with tab:
+                    try:
+                        if f.name.endswith(".csv"):
+                            df_preview = pd.read_csv(f, nrows=5)
+                        else:
+                            df_preview = pd.read_excel(f, nrows=5)
+                        st.dataframe(df_preview, width='stretch')
+                    except Exception as e:
+                        st.error(f"无法读取该文件: {e}")
+                    f.seek(0)
+
+        # Build data_list for manual mode
+        data_list = []
+        if all_uploaded:
+            from bank_pipeline.loader import detect_date_column, parse_date_column
+            for freq, files in [("daily", daily_files), ("monthly", monthly_files), ("quarterly", quarterly_files)]:
+                for f in files:
+                    try:
+                        if f.name.endswith(".csv"):
+                            df = pd.read_csv(f)
+                        else:
+                            df = pd.read_excel(f)
+                    except Exception as e:
+                        st.error(f"读取 {f.name} 失败: {e}")
+                        continue
+                    date_col = detect_date_column(df, ["Date", "date", "日期", "月份", "季度", "时间"])
+                    if date_col is None:
+                        st.error(f"❌ {f.name}: 未找到日期列")
+                        continue
+                    df[date_col] = parse_date_column(df[date_col])
+                    df = df.dropna(subset=[date_col]).sort_values(date_col)
+                    data_list.append((df, date_col, freq))
 
     st.header("▶️ 运行处理")
-    run_clicked = st.button("🚀 开始处理", type="primary", use_container_width=True)
+    run_clicked = st.button("🚀 开始处理", type="primary", width='stretch')
 
     log_container = st.empty()
 
     if run_clicked:
-        if not all_uploaded:
+        if not data_list:
             st.error("❌ 请先上传数据文件")
             st.stop()
-
-        # Read all files into memory DataFrames
-        from bank_pipeline.loader import detect_date_column, parse_date_column
-
-        data_list = []
-
-        for freq, files in [("daily", daily_files), ("monthly", monthly_files), ("quarterly", quarterly_files)]:
-            for f in files:
-                try:
-                    if f.name.endswith(".csv"):
-                        df = pd.read_csv(f)
-                    else:
-                        df = pd.read_excel(f)
-                except Exception as e:
-                    st.error(f"读取 {f.name} 失败: {e}")
-                    st.stop()
-
-                date_col = detect_date_column(df, ["Date", "date", "日期", "月份", "季度", "时间"])
-                if date_col is None:
-                    st.error(f"❌ {f.name}: 未找到日期列")
-                    st.stop()
-
-                df[date_col] = parse_date_column(df[date_col])
-                df = df.dropna(subset=[date_col]).sort_values(date_col)
-                data_list.append((df, date_col, freq))
 
         # Run pipeline in-memory
         import io, logging
@@ -323,7 +372,7 @@ elif page == "AkShare 宏观数据同步":
     if selected:
         st.header(f"✅ 已选择 {len(selected)} 个指标")
 
-        if st.button("🔄 重新拉取", key="akshare_refresh", use_container_width=True):
+        if st.button("🔄 重新拉取", key="akshare_refresh", width='stretch'):
             with st.spinner("正在重新拉取数据..."):
                 for sid in selected:
                     get_macro_data(
@@ -354,7 +403,7 @@ elif page == "AkShare 宏观数据同步":
                         st.session_state.validated_freqs[sid] = actual_freq
 
                     st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
-                    st.dataframe(df_preview.tail(10), use_container_width=True)
+                    st.dataframe(df_preview.tail(10), width='stretch')
                 else:
                     st.error("数据加载失败")
     else:
@@ -362,7 +411,7 @@ elif page == "AkShare 宏观数据同步":
 
     # Merge and export
     st.header("▶️ 合并导出")
-    if selected and st.button("🚀 下载合并后的月度数据", type="primary", use_container_width=True):
+    if selected and st.button("🚀 下载合并后的月度数据", type="primary", width='stretch'):
         with st.spinner(f"正在同步 {len(selected)} 个指标的数据..."):
             merged_df, meta = merge_selected_macros(
                 selected,
@@ -380,7 +429,7 @@ elif page == "AkShare 宏观数据同步":
                     file_name="akshare_merged.csv",
                     mime="text/csv",
                 )
-            st.dataframe(merged_df.tail(20), use_container_width=True)
+            st.dataframe(merged_df.tail(20), width='stretch')
         else:
             st.error("合并失败，请检查网络或选择的指标")
 
@@ -417,7 +466,7 @@ elif page == "Tushare 宏观数据同步":
     with btn_col:
         st.write("")
         st.write("")
-        if st.button("🧪 测试连接", use_container_width=True):
+        if st.button("🧪 测试连接", width='stretch'):
             if not tushare_token:
                 st.error("请先输入 Token")
             else:
@@ -469,7 +518,7 @@ elif page == "Tushare 宏观数据同步":
         st.header(f"✅ 已选择 {len(tushare_selected)} 个指标")
 
         refresh_disabled = not api_ready
-        if st.button("🔄 重新拉取", key="tushare_refresh", use_container_width=True, disabled=refresh_disabled):
+        if st.button("🔄 重新拉取", key="tushare_refresh", width='stretch', disabled=refresh_disabled):
             with st.spinner("正在重新拉取数据..."):
                 for sid in tushare_selected:
                     get_tushare_data(
@@ -509,7 +558,7 @@ elif page == "Tushare 宏观数据同步":
                         st.session_state.validated_freqs[sid] = actual_freq
 
                     st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
-                    st.dataframe(df_preview.tail(10), use_container_width=True)
+                    st.dataframe(df_preview.tail(10), width='stretch')
                 else:
                     st.error("数据加载失败")
     else:
@@ -521,7 +570,7 @@ elif page == "Tushare 宏观数据同步":
     if st.button(
         "🚀 下载合并后的月度数据",
         type="primary",
-        use_container_width=True,
+        width='stretch',
         disabled=merge_disabled,
     ):
         with st.spinner(f"正在同步 {len(tushare_selected)} 个指标的数据..."):
@@ -543,7 +592,7 @@ elif page == "Tushare 宏观数据同步":
                     file_name="tushare_merged.csv",
                     mime="text/csv",
                 )
-            st.dataframe(merged_df.tail(20), use_container_width=True)
+            st.dataframe(merged_df.tail(20), width='stretch')
         else:
             st.error("合并失败，请检查网络或选择的指标")
 
@@ -577,7 +626,7 @@ elif page == "同花顺 iFinD 宏观数据同步":
     with btn_col:
         st.write("")
         st.write("")
-        if st.button("🧪 测试连接", use_container_width=True):
+        if st.button("🧪 测试连接", width='stretch'):
             if not ifind_token:
                 st.error("请先输入 Token")
             else:
@@ -646,7 +695,7 @@ elif page == "同花顺 iFinD 宏观数据同步":
     indicator_input = st.text_input("输入 iFinD 指标代码（逗号分隔）", value="", help="例如: M0000001,M0000002")
     freq_input = st.selectbox("频率", ["day", "month", "quarter", "year"], index=1)
 
-    if indicator_input and st.button("🚀 拉取数据", type="primary", use_container_width=True, disabled=not api_ready):
+    if indicator_input and st.button("🚀 拉取数据", type="primary", width='stretch', disabled=not api_ready):
         codes = [c.strip() for c in indicator_input.split(",") if c.strip()]
         for code in codes:
             with st.spinner(f"拉取 {code}..."):
@@ -659,7 +708,7 @@ elif page == "同花顺 iFinD 宏观数据同步":
                 )
             if df is not None and not df.empty:
                 st.write(f"{code}: {len(df)} 行")
-                st.dataframe(df.tail(10), use_container_width=True)
+                st.dataframe(df.tail(10), width='stretch')
                 internal_freq = IFIND_API_FREQ_MAP.get(freq_input, freq_input)
                 parsed_indicators.append({
                     "id": code,
@@ -683,7 +732,7 @@ elif page == "同花顺 iFinD 宏观数据同步":
 
         if selected:
             st.header("▶️ 合并导出")
-            if st.button("🚀 下载合并后的月度数据", type="primary", use_container_width=True):
+            if st.button("🚀 下载合并后的月度数据", type="primary", width='stretch'):
                 from bank_pipeline.cleaner import DataCleaner
 
                 try:
@@ -706,7 +755,7 @@ elif page == "同花顺 iFinD 宏观数据同步":
                     st.success(f"✅ 合并完成！{merged_df.shape[0]} 行 × {merged_df.shape[1]} 列")
                     with open(output_path, "rb") as f:
                         st.download_button("⬇️ 下载 CSV", data=f, file_name="ifind_merged.csv", mime="text/csv")
-                    st.dataframe(merged_df.tail(20), use_container_width=True)
+                    st.dataframe(merged_df.tail(20), width='stretch')
                 except Exception as e:
                     st.error(f"合并导出失败: {e}")
 

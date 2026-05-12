@@ -95,6 +95,160 @@ def parse_yyyymmdd_date(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series.astype(str).str.strip(), format="%Y%m%d", errors="coerce")
 
 
+def _is_default_column_name(name: str) -> bool:
+    """Check if a column name is a pandas default (Unnamed: N) or pure numeric."""
+    if pd.isna(name):
+        return True
+    s = str(name).strip()
+    if s.startswith("Unnamed:"):
+        return True
+    # Pure numeric like "0", "1", "0.0"
+    try:
+        float(s)
+        return True
+    except ValueError:
+        pass
+    return False
+
+
+def fix_column_names(df: pd.DataFrame, date_col: Optional[str] = None) -> pd.DataFrame:
+    """Fix default/auto-generated column names using first data row.
+
+    If most column names look like pandas defaults (Unnamed: N) or are numeric,
+    construct better names from the first data row.
+    For non-default columns, optionally append the first-row value if it provides
+    extra context (e.g. indicator description).
+    """
+    df = df.copy()
+    cols = list(df.columns)
+    default_count = sum(1 for c in cols if _is_default_column_name(c))
+
+    # If more than half are default names, replace all with first data row
+    if default_count > len(cols) // 2 and len(df) > 0:
+        first_row = df.iloc[0]
+        new_cols = []
+        for i, c in enumerate(cols):
+            val = first_row.iloc[i]
+            val_str = str(val).strip() if pd.notna(val) else ""
+            if val_str and val_str not in ("nan", "None", ""):
+                new_cols.append(val_str)
+            else:
+                new_cols.append(f"col_{i}")
+        df.columns = new_cols
+        df = df.iloc[1:].reset_index(drop=True)
+        return df
+
+    # If only a few are default, fix just those (do NOT drop the first row
+    # because non-default columns may contain real data there).
+    if default_count > 0 and len(df) > 0:
+        first_row = df.iloc[0]
+        new_cols = []
+        for i, c in enumerate(cols):
+            if _is_default_column_name(c):
+                val = first_row.iloc[i]
+                val_str = str(val).strip() if pd.notna(val) else ""
+                if val_str and val_str not in ("nan", "None", ""):
+                    new_cols.append(val_str)
+                else:
+                    new_cols.append(f"col_{i}")
+            else:
+                new_cols.append(c)
+        df.columns = new_cols
+
+    return df
+
+
+def filter_numeric_columns(
+    df: pd.DataFrame,
+    date_col: str,
+    threshold: float = 0.5,
+) -> List[str]:
+    """Return only columns that are mostly numeric (suitable for time series).
+
+    Parameters
+    ----------
+    df: DataFrame (already parsed, date column converted to datetime)
+    date_col: name of the date column to exclude
+    threshold: minimum fraction of non-null numeric values to keep a column
+
+    Returns
+    -------
+    List of column names that pass the numeric filter.
+    """
+    numeric_cols = []
+    for col in df.columns:
+        if col == date_col:
+            continue
+        # Try to coerce to numeric
+        numeric_series = pd.to_numeric(df[col], errors="coerce")
+        valid_ratio = numeric_series.notna().sum() / len(df)
+        if valid_ratio >= threshold:
+            numeric_cols.append(col)
+    return numeric_cols
+
+
+def auto_parse_dataframe(df: pd.DataFrame) -> Dict:
+    """Universal auto-parse any macro data DataFrame.
+
+    Steps:
+        1. Fix default column names
+        2. Detect date column (by name or content)
+        3. Detect and skip metadata rows
+        4. Parse dates
+        5. Filter to numeric columns only
+        6. Detect frequency
+
+    Returns dict with same keys as parse_ifind_excel.
+    """
+    df = df.copy()
+
+    # Step 1: fix column names if they look auto-generated
+    df = fix_column_names(df)
+
+    # Step 2: detect date column
+    date_col = detect_date_column_ifind(df)
+    if date_col is None:
+        raise ValueError("No date column found. Expected '指标名称' or similar.")
+
+    # Step 3: detect metadata
+    metadata_rows = _count_metadata_rows(df)
+    freq = extract_frequency_from_metadata(df)
+    unit = extract_unit_from_metadata(df)
+
+    if metadata_rows > 0:
+        df = df.iloc[metadata_rows:].reset_index(drop=True)
+
+    # Step 4: parse dates with multiple format attempts
+    df[date_col] = parse_yyyymmdd_date(df[date_col])
+    if df[date_col].isna().all():
+        # Try generic parsing
+        df[date_col] = pd.to_datetime(df[date_col].astype(str).str.strip(), errors="coerce")
+    df = df.dropna(subset=[date_col])
+
+    # Step 5: filter to numeric columns
+    data_cols = filter_numeric_columns(df, date_col)
+    if not data_cols:
+        raise ValueError("No numeric data columns found after parsing.")
+
+    # Keep only date + numeric data columns
+    df = df[[date_col] + data_cols].copy()
+    for col in data_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Step 6: detect frequency if not from metadata
+    if freq == "unknown" and len(df) >= 2:
+        freq = detect_frequency(df, date_col)
+
+    return {
+        "date_col": date_col,
+        "data_cols": data_cols,
+        "freq": freq,
+        "unit": unit,
+        "data": df,
+        "metadata_rows": metadata_rows,
+    }
+
+
 def _looks_like_metadata_row(row: pd.Series) -> bool:
     """Check if a row contains metadata keywords."""
     values = [str(v).strip() for v in row.dropna().tolist()]
@@ -168,13 +322,17 @@ def parse_ifind_excel(df: pd.DataFrame) -> Dict:
     df[date_col] = parse_yyyymmdd_date(df[date_col])
     df = df.dropna(subset=[date_col])
 
-    data_cols = [c for c in df.columns if c != date_col]
+    # Filter to numeric columns only (skip text/category columns)
+    data_cols = filter_numeric_columns(df, date_col)
 
     if freq == "unknown" and len(df) >= 2:
         freq = detect_frequency(df, date_col)
 
     for col in data_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Keep only date + numeric data columns
+    df = df[[date_col] + data_cols].copy()
 
     return {
         "date_col": date_col,
