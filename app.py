@@ -17,6 +17,9 @@ import streamlit as st
 
 st.set_page_config(page_title="银行预测数据处理系统", layout="wide")
 
+if "validated_freqs" not in st.session_state:
+    st.session_state.validated_freqs = {}
+
 
 def open_folder(path: str):
     """Open a folder in the native file explorer."""
@@ -297,7 +300,14 @@ elif page == "AkShare 宏观数据同步":
     with search_col:
         keyword = st.text_input("输入关键词搜索（如 CPI、GDP、PMI）", value="")
 
-    results = search_macros(keyword)
+    results = [{**r} for r in search_macros(keyword)]
+
+    # Apply runtime-validated frequencies if available
+    validated_freqs = st.session_state.get("validated_freqs", {})
+    for r in results:
+        if r["id"] in validated_freqs:
+            r["freq"] = validated_freqs[r["id"]]
+
     st.caption(f"找到 {len(results)} 个数据指标")
 
     # Selection table
@@ -335,6 +345,14 @@ elif page == "AkShare 宏观数据同步":
                         end_date=str(end_date),
                     )
                 if df_preview is not None and not df_preview.empty:
+                    # Runtime frequency validation
+                    from bank_pipeline.akshare_sync import detect_data_frequency
+                    actual_freq = detect_data_frequency(df_preview)
+                    if actual_freq != "unknown":
+                        if "validated_freqs" not in st.session_state:
+                            st.session_state.validated_freqs = {}
+                        st.session_state.validated_freqs[sid] = actual_freq
+
                     st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
                     st.dataframe(df_preview.tail(10), use_container_width=True)
                 else:
@@ -425,7 +443,14 @@ elif page == "Tushare 宏观数据同步":
     with search_col:
         tushare_keyword = st.text_input("输入关键词搜索（如 CPI、GDP、M2）", value="", key="tushare_search")
 
-    tushare_results = search_tushare(tushare_keyword)
+    tushare_results = [{**r} for r in search_tushare(tushare_keyword)]
+
+    # Apply runtime-validated frequencies if available
+    validated_freqs = st.session_state.get("validated_freqs", {})
+    for r in tushare_results:
+        if r["id"] in validated_freqs:
+            r["freq"] = validated_freqs[r["id"]]
+
     st.caption(f"找到 {len(tushare_results)} 个数据指标")
 
     # Selection table
@@ -475,6 +500,14 @@ elif page == "Tushare 宏观数据同步":
                     else:
                         df_preview = None
                 if df_preview is not None and not df_preview.empty:
+                    # Runtime frequency validation
+                    from bank_pipeline.akshare_sync import detect_data_frequency
+                    actual_freq = detect_data_frequency(df_preview)
+                    if actual_freq != "unknown":
+                        if "validated_freqs" not in st.session_state:
+                            st.session_state.validated_freqs = {}
+                        st.session_state.validated_freqs[sid] = actual_freq
+
                     st.write(f"数据量: {len(df_preview)} 行 × {len(df_preview.columns)} 列")
                     st.dataframe(df_preview.tail(10), use_container_width=True)
                 else:
