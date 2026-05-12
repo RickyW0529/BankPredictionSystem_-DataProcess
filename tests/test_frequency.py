@@ -89,3 +89,5 @@ def test_detect_frequency_fewer_than_two_dates():
     """Fewer than 2 valid dates should return unknown."""
     df = pd.DataFrame({"dt": [pd.Timestamp("2024-01-01")]})
     assert detect_frequency(df, "dt") == "unknown"
+
+

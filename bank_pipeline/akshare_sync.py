@@ -176,7 +176,7 @@ MACRO_CATALOG: List[Dict] = [
     {
         "id": "construction",
         "name": "建筑业指数",
-        "freq": "monthly",
+        "freq": "daily",
         "func": "macro_china_construction_index",
         "date_col": "月份",
         "columns": [],
@@ -184,7 +184,7 @@ MACRO_CATALOG: List[Dict] = [
     {
         "id": "energy",
         "name": "能源指数",
-        "freq": "monthly",
+        "freq": "daily",
         "func": "macro_china_energy_index",
         "date_col": "月份",
         "columns": [],
@@ -200,7 +200,7 @@ MACRO_CATALOG: List[Dict] = [
     {
         "id": "agricultural",
         "name": "农产品指数",
-        "freq": "monthly",
+        "freq": "daily",
         "func": "macro_china_agricultural_index",
         "date_col": "月份",
         "columns": [],
@@ -208,7 +208,7 @@ MACRO_CATALOG: List[Dict] = [
     {
         "id": "freight",
         "name": "货运指数",
-        "freq": "monthly",
+        "freq": "daily",
         "func": "macro_china_freight_index",
         "date_col": "月份",
         "columns": [],
@@ -563,7 +563,10 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_chinese_date(val):
-    """Parse Chinese date strings like '2026年04月份', '2026年第1季度', '2026年'."""
+    """Parse Chinese date strings like '2026年04月份', '2026年第1季度'.
+
+    Year-only strings (e.g. '2026年') return NaT since we only support daily/monthly/quarterly data.
+    """
     import re
 
     s = str(val).strip()
@@ -581,10 +584,10 @@ def _parse_chinese_date(val):
         q = int(m.group(2))
         month = (q - 1) * 3 + 1
         return pd.Timestamp(f"{m.group(1)}-{month:02d}-01")
-    # 2026年 -> 2026-01-01
+    # 2026年 -> NaT (drop yearly-only data; we only support daily/monthly/quarterly)
     m = re.match(r"(\d{4})年$", s)
     if m:
-        return pd.Timestamp(f"{m.group(1)}-01-01")
+        return pd.NaT
     # fallback to pandas parser
     return pd.to_datetime(s, errors="coerce")
 
