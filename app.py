@@ -128,7 +128,7 @@ def _render_indicator_selector(results, selected_key, freq_map, prefix, disabled
 
 
 # Page navigation
-page = st.sidebar.radio("页面", ["本地数据处理", "AkShare 宏观数据同步", "Tushare 宏观数据同步"])
+page = st.sidebar.radio("页面", ["本地数据处理", "AkShare 宏观数据同步", "Tushare 宏观数据同步", "同花顺 iFinD 宏观数据同步"])
 
 # ===== Sidebar: Configuration =====
 st.sidebar.title("⚙️ 参数配置")
@@ -549,3 +549,155 @@ elif page == "Tushare 宏观数据同步":
 
     st.markdown("---")
     st.caption("数据来源于 Tushare Pro 财经数据接口")
+
+elif page == "同花顺 iFinD 宏观数据同步":
+    st.title("📡 同花顺 iFinD 宏观数据同步")
+    st.markdown("从 iFinD HTTP API 拉取数据，或上传导出的 Excel/CSV 文件")
+
+    from bank_pipeline.ifind_sync import IFindClient
+    from bank_pipeline.ifind_parser import parse_ifind_excel
+
+    IFIND_API_FREQ_MAP = {
+        "day": "daily",
+        "month": "monthly",
+        "quarter": "quarterly",
+        "year": "yearly",
+    }
+
+    # API Configuration
+    st.header("🔑 API 配置")
+    token_col, btn_col = st.columns([3, 1])
+    with token_col:
+        ifind_token = st.text_input(
+            "iFinD Access Token",
+            value="",
+            type="password",
+            help="请输入您的 iFinD Access Token",
+        )
+    with btn_col:
+        st.write("")
+        st.write("")
+        if st.button("🧪 测试连接", use_container_width=True):
+            if not ifind_token:
+                st.error("请先输入 Token")
+            else:
+                with st.spinner("测试中..."):
+                    client = IFindClient(ifind_token)
+                    is_valid = client.test_connection()
+                if is_valid:
+                    st.success("✅ 连接成功")
+                    st.session_state.ifind_api_ready = True
+                else:
+                    st.error("❌ 连接失败，请检查 Token")
+                    st.session_state.ifind_api_ready = False
+
+    api_ready = st.session_state.get("ifind_api_ready", False)
+    if not ifind_token:
+        api_ready = False
+        st.info("请输入 iFinD Access Token 并测试连接")
+    elif not api_ready:
+        st.info("请输入 Token 后点击【测试连接】以启用数据操作")
+
+    # File upload section
+    st.header("📂 或上传 iFinD 导出文件")
+    uploaded_files = st.file_uploader(
+        "上传 Excel/CSV 文件",
+        type=["csv", "xlsx", "xls"],
+        accept_multiple_files=True,
+        key="ifind_uploader",
+    )
+
+    parsed_indicators = []
+    if uploaded_files:
+        for f in uploaded_files:
+            try:
+                if f.name.endswith(".csv"):
+                    df_raw = pd.read_csv(f)
+                else:
+                    df_raw = pd.read_excel(f)
+                parsed = parse_ifind_excel(df_raw)
+                for col in parsed["data_cols"]:
+                    parsed_indicators.append({
+                        "id": f"{f.name}_{col}",
+                        "name": col,
+                        "freq": parsed["freq"],
+                        "data": parsed["data"][[parsed["date_col"], col]].rename(
+                            columns={parsed["date_col"]: "指标名称", col: col}
+                        ),
+                    })
+                st.success(f"✅ 已解析 {f.name}: {len(parsed['data'])} 行 × {len(parsed['data_cols'])} 列 (频率: {parsed['freq']})")
+            except Exception as e:
+                st.error(f"❌ 解析 {f.name} 失败: {e}")
+
+    # API fetch section
+    st.header("🔍 API 指标拉取")
+    indicator_input = st.text_input("输入 iFinD 指标代码（逗号分隔）", value="", help="例如: M0000001,M0000002")
+    freq_input = st.selectbox("频率", ["day", "month", "quarter", "year"], index=1)
+
+    if indicator_input and st.button("🚀 拉取数据", type="primary", use_container_width=True, disabled=not api_ready):
+        codes = [c.strip() for c in indicator_input.split(",") if c.strip()]
+        for code in codes:
+            with st.spinner(f"拉取 {code}..."):
+                client = IFindClient(ifind_token)
+                df = client.fetch_history(
+                    code,
+                    start_date=str(start_date).replace("-", ""),
+                    end_date=str(end_date).replace("-", ""),
+                    frequency=freq_input,
+                )
+            if df is not None and not df.empty:
+                st.write(f"{code}: {len(df)} 行")
+                st.dataframe(df.tail(10), use_container_width=True)
+                internal_freq = IFIND_API_FREQ_MAP.get(freq_input, freq_input)
+                parsed_indicators.append({
+                    "id": code,
+                    "name": code,
+                    "freq": internal_freq,
+                    "data": df,
+                })
+            else:
+                st.error(f"❌ {code} 拉取失败")
+
+    # Indicator selector for merged export
+    if parsed_indicators:
+        st.header("📋 选择要导出的指标")
+        catalog = [{"id": p["id"], "name": p["name"], "freq": p["freq"]} for p in parsed_indicators]
+
+        if "selected_ifind" not in st.session_state:
+            st.session_state.selected_ifind = set()
+
+        selected = st.multiselect(
+            "选择指标",
+            options=[p["id"] for p in parsed_indicators],
+            format_func=lambda x: next((p["name"] for p in parsed_indicators if p["id"] == x), x),
+            default=list(st.session_state.selected_ifind),
+        )
+        st.session_state.selected_ifind = set(selected)
+
+        if selected:
+            st.header("▶️ 合并导出")
+            if st.button("🚀 下载合并后的月度数据", type="primary", use_container_width=True):
+                from bank_pipeline.cleaner import DataCleaner
+
+                data_list = []
+                for sid in selected:
+                    item = next(p for p in parsed_indicators if p["id"] == sid)
+                    df = item["data"].copy()
+                    date_col_candidates = [c for c in df.columns if c in ("指标名称", "时间", "日期")]
+                    date_col = date_col_candidates[0] if date_col_candidates else df.columns[0]
+                    if df[date_col].dtype == object:
+                        from bank_pipeline.ifind_parser import parse_yyyymmdd_date
+                        df[date_col] = parse_yyyymmdd_date(df[date_col])
+                    data_list.append((df, date_col, item["freq"]))
+
+                cleaner = DataCleaner(missing_value_threshold=missing_threshold)
+                merged_df = cleaner.merge_dataframes(data_list)
+                output_path = "./output/ifind_merged.csv"
+                merged_df.to_csv(output_path, index=False)
+                st.success(f"✅ 合并完成！{merged_df.shape[0]} 行 × {merged_df.shape[1]} 列")
+                with open(output_path, "rb") as f:
+                    st.download_button("⬇️ 下载 CSV", data=f, file_name="ifind_merged.csv", mime="text/csv")
+                st.dataframe(merged_df.tail(20), use_container_width=True)
+
+    st.markdown("---")
+    st.caption("数据来源于同花顺 iFinD 数据接口")
