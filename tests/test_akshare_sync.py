@@ -2,7 +2,7 @@
 
 import pandas as pd
 import pytest
-from bank_pipeline.akshare_sync import search_macros, get_macro_data, _parse_chinese_date, MACRO_CATALOG
+from bank_pipeline.akshare_sync import search_macros, get_macro_data, _parse_chinese_date, MACRO_CATALOG, detect_data_frequency
 
 try:
     import akshare as ak  # noqa: F401
@@ -71,3 +71,19 @@ def test_catalog_agricultural_is_daily():
 def test_catalog_freight_is_daily():
     meta = next(m for m in MACRO_CATALOG if m["id"] == "freight")
     assert meta["freq"] == "daily"
+
+
+def test_detect_data_frequency_from_monthly_df():
+    df = pd.DataFrame({
+        "指标名称": pd.to_datetime(["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01"]),
+        "val": [1, 2, 3, 4],
+    })
+    assert detect_data_frequency(df) == "monthly"
+
+
+def test_detect_data_frequency_from_daily_df():
+    df = pd.DataFrame({
+        "指标名称": pd.date_range("2024-01-01", periods=5, freq="D"),
+        "val": [1, 2, 3, 4, 5],
+    })
+    assert detect_data_frequency(df) == "daily"

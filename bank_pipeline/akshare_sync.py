@@ -9,6 +9,13 @@ import pandas as pd
 
 from .cleaner import DataCleaner
 from .engineer import handle_spring_festival_split
+from .loader import detect_frequency
+
+
+def detect_data_frequency(df: pd.DataFrame, date_col: str = "指标名称") -> str:
+    """Detect actual frequency from fetched DataFrame."""
+    return detect_frequency(df, date_col)
+
 
 # 频率映射
 FREQ_MAP = {
