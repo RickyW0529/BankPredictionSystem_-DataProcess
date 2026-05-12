@@ -58,6 +58,76 @@ def find_data_files(data_dir: str) -> list:
     return sorted(files)
 
 
+def _render_indicator_selector(results, selected_key, freq_map, prefix, disabled=False):
+    """Render grouped indicator selector with select-all/clear/invert."""
+    from collections import defaultdict
+
+    # Group by frequency
+    grouped = defaultdict(list)
+    for item in results:
+        grouped[item["freq"]].append(item)
+
+    # Frequency order
+    freq_order = ["daily", "monthly", "quarterly"]
+    freq_labels = {
+        "daily": "📅 日度指标",
+        "monthly": "📆 月度指标",
+        "quarterly": "📊 季度指标",
+    }
+
+    # Stats metric
+    selected_set = st.session_state.get(selected_key, set())
+    total_results = len(results)
+    st.metric("已选 / 总计", f"{len(selected_set)} / {total_results}")
+
+    # Batch controls
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("✅ 全选", key=f"{prefix}_select_all", use_container_width=True, disabled=disabled):
+            for item in results:
+                st.session_state[selected_key].add(item["id"])
+            st.rerun()
+    with col2:
+        if st.button("❌ 清空", key=f"{prefix}_clear_all", use_container_width=True, disabled=disabled):
+            for item in results:
+                st.session_state[selected_key].discard(item["id"])
+            st.rerun()
+    with col3:
+        if st.button("🔄 反选", key=f"{prefix}_invert", use_container_width=True, disabled=disabled):
+            for item in results:
+                if item["id"] in st.session_state[selected_key]:
+                    st.session_state[selected_key].discard(item["id"])
+                else:
+                    st.session_state[selected_key].add(item["id"])
+            st.rerun()
+
+    # Grouped expanders
+    for freq in freq_order:
+        if freq not in grouped:
+            continue
+        items = grouped[freq]
+        label = freq_labels.get(freq, freq)
+        selected_in_group = sum(1 for it in items if it["id"] in selected_set)
+        with st.expander(f"{label} ({len(items)} 个, 已选 {selected_in_group})", expanded=False):
+            cols_per_row = 2
+            for i in range(0, len(items), cols_per_row):
+                row_items = items[i:i + cols_per_row]
+                cols = st.columns(cols_per_row)
+                for col, item in zip(cols, row_items):
+                    with col:
+                        checked = item["id"] in st.session_state[selected_key]
+                        freq_label = freq_map.get(item["freq"], item["freq"])
+                        if st.checkbox(
+                            f"**{item['name']}**  ({freq_label})",
+                            value=checked,
+                            key=f"{prefix}_chk_{item['id']}",
+                            disabled=disabled,
+                        ):
+                            st.session_state[selected_key].add(item["id"])
+                        else:
+                            st.session_state[selected_key].discard(item["id"])
+
+
 # Page navigation
 page = st.sidebar.radio("页面", ["本地数据处理", "AkShare 宏观数据同步", "Tushare 宏观数据同步"])
 
@@ -211,22 +281,7 @@ elif page == "AkShare 宏观数据同步":
     if "selected_macros" not in st.session_state:
         st.session_state.selected_macros = set()
 
-    cols_per_row = 2
-    for i in range(0, len(results), cols_per_row):
-        row_items = results[i:i + cols_per_row]
-        cols = st.columns(cols_per_row)
-        for col, item in zip(cols, row_items):
-            with col:
-                checked = item["id"] in st.session_state.selected_macros
-                freq_label = FREQ_MAP.get(item["freq"], item["freq"])
-                if st.checkbox(
-                    f"**{item['name']}**  ({freq_label})",
-                    value=checked,
-                    key=f"chk_{item['id']}",
-                ):
-                    st.session_state.selected_macros.add(item["id"])
-                else:
-                    st.session_state.selected_macros.discard(item["id"])
+    _render_indicator_selector(results, "selected_macros", FREQ_MAP, "akshare")
 
     # Preview selected
     selected = list(st.session_state.selected_macros)
@@ -338,24 +393,9 @@ elif page == "Tushare 宏观数据同步":
     if "selected_tushare" not in st.session_state:
         st.session_state.selected_tushare = set()
 
-    cols_per_row = 2
-    for i in range(0, len(tushare_results), cols_per_row):
-        row_items = tushare_results[i:i + cols_per_row]
-        cols = st.columns(cols_per_row)
-        for col, item in zip(cols, row_items):
-            with col:
-                checked = item["id"] in st.session_state.selected_tushare
-                freq_label = TUSHARE_FREQ_MAP.get(item["freq"], item["freq"])
-                disabled = not api_ready
-                if st.checkbox(
-                    f"**{item['name']}**  ({freq_label})",
-                    value=checked,
-                    key=f"tushare_chk_{item['id']}",
-                    disabled=disabled,
-                ):
-                    st.session_state.selected_tushare.add(item["id"])
-                else:
-                    st.session_state.selected_tushare.discard(item["id"])
+    _render_indicator_selector(
+        tushare_results, "selected_tushare", TUSHARE_FREQ_MAP, "tushare", disabled=not api_ready
+    )
 
     # Preview selected
     tushare_selected = list(st.session_state.selected_tushare)
