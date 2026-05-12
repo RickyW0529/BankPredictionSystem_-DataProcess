@@ -658,13 +658,59 @@ elif page == "同花顺 iFinD 宏观数据同步":
     elif not api_ready:
         st.info("请输入 Token 后点击【测试连接】以启用数据操作")
 
+    # Custom indicators input
+    with st.expander("➕ 添加自定义指标（可选）", expanded=False):
+        st.markdown("每行一个，格式：`指标名称：指标代码`，例如 `人民币汇率：M0009915`")
+        custom_input = st.text_area(
+            "自定义指标列表",
+            value="",
+            placeholder="居民消费价格指数同比：M0000001\n工业增加值同比：M0000274",
+            height=120,
+            key="ifind_custom_input",
+        )
+        custom_freq = st.selectbox(
+            "自定义指标默认频率",
+            ["monthly", "daily", "quarterly", "yearly"],
+            index=0,
+            key="ifind_custom_freq",
+        )
+
+    def _parse_custom_indicators(text: str, freq: str):
+        items = []
+        for line in text.strip().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # Support separators: ： : = , ，
+            for sep in ("：", ":", "=", ",", "，"):
+                if sep in line:
+                    parts = line.split(sep, 1)
+                    if len(parts) == 2:
+                        name, indicator = parts[0].strip(), parts[1].strip()
+                        if name and indicator:
+                            item_id = f"custom_{indicator}"
+                            items.append({
+                                "id": item_id,
+                                "name": name,
+                                "freq": freq,
+                                "indicator": indicator,
+                            })
+                        break
+        return items
+
+    custom_items = _parse_custom_indicators(custom_input, custom_freq)
+    if custom_items:
+        st.caption(f"已解析 {len(custom_items)} 个自定义指标")
+
     # Catalog search and selection
     st.header("🔍 搜索宏观数据")
     search_col, _ = st.columns([2, 1])
     with search_col:
         ifind_keyword = st.text_input("输入关键词搜索（如 CPI、GDP、PMI）", value="", key="ifind_search")
 
-    ifind_results = [{**r} for r in search_ifind(ifind_keyword)]
+    base_results = [{**r} for r in search_ifind(ifind_keyword)]
+    # Merge custom items into results
+    ifind_results = custom_items + base_results
 
     # Apply runtime-validated frequencies if available
     validated_freqs = st.session_state.get("validated_freqs", {})
@@ -752,13 +798,24 @@ elif page == "同花顺 iFinD 宏观数据同步":
             with tab:
                 with st.spinner("加载中..."):
                     if api_ready:
-                        df_preview = get_ifind_data(
-                            sid,
-                            access_token=ifind_token,
-                            frequency="month",
-                            start_date=str(start_date),
-                            end_date=str(end_date),
-                        )
+                        # Check if this is a custom indicator
+                        custom_meta = next((c for c in custom_items if c["id"] == sid), None)
+                        if custom_meta:
+                            client = IFindClient(ifind_token)
+                            df_preview = client.fetch_history(
+                                custom_meta["indicator"],
+                                start_date=str(start_date).replace("-", ""),
+                                end_date=str(end_date).replace("-", ""),
+                                frequency="month",
+                            )
+                        else:
+                            df_preview = get_ifind_data(
+                                sid,
+                                access_token=ifind_token,
+                                frequency="month",
+                                start_date=str(start_date),
+                                end_date=str(end_date),
+                            )
                     else:
                         df_preview = None
                 if df_preview is not None and not df_preview.empty:
@@ -793,11 +850,16 @@ elif page == "同花顺 iFinD 宏观数据同步":
         with st.spinner(f"正在处理数据..."):
             merged_df = None
             meta = None
+            from bank_pipeline.cleaner import DataCleaner
+
+            # Separate catalog ids and custom ids
+            catalog_ids = [sid for sid in ifind_catalog_selected if not sid.startswith("custom_")]
+            custom_selected = [c for c in custom_items if c["id"] in ifind_catalog_selected]
 
             # Catalog items via API
-            if ifind_catalog_selected:
+            if catalog_ids:
                 merged_df, meta = merge_ifind_selected(
-                    ifind_catalog_selected,
+                    catalog_ids,
                     access_token=ifind_token,
                     frequency="month",
                     output_path="./output/ifind_merged.csv",
@@ -806,10 +868,39 @@ elif page == "同花顺 iFinD 宏观数据同步":
                     end_date=str(end_date),
                 )
 
+            # Custom indicators via direct API fetch
+            if custom_selected and api_ready:
+                custom_data_list = []
+                for citem in custom_selected:
+                    client = IFindClient(ifind_token)
+                    df = client.fetch_history(
+                        citem["indicator"],
+                        start_date=str(start_date).replace("-", ""),
+                        end_date=str(end_date).replace("-", ""),
+                        frequency="month",
+                    )
+                    if df is not None and not df.empty:
+                        rename_map = {}
+                        for col in df.columns:
+                            if col != "指标名称":
+                                rename_map[col] = f"{citem['name']}_{col}"
+                        if rename_map:
+                            df = df.rename(columns=rename_map)
+                        custom_data_list.append((df, "指标名称", citem["freq"]))
+
+                if custom_data_list:
+                    cleaner = DataCleaner(missing_value_threshold=missing_threshold)
+                    custom_merged = cleaner.merge_dataframes(custom_data_list)
+                    if merged_df is not None and not merged_df.empty:
+                        merged_df = merged_df.merge(custom_merged, on="指标名称", how="outer")
+                    else:
+                        merged_df = custom_merged
+                    output_path = "./output/ifind_merged.csv"
+                    merged_df.to_csv(output_path, index=False)
+                    meta = {"shape": merged_df.shape, "output": output_path}
+
             # File upload items
             if parsed_indicators:
-                from bank_pipeline.cleaner import DataCleaner
-
                 ifind_selected_files = list(st.session_state.get("selected_ifind", set()))
                 data_list = []
                 for sid in ifind_selected_files:
