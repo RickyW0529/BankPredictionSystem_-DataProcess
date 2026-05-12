@@ -45,7 +45,7 @@ class DataCleaner:
             if not last_date.is_month_end:
                 df = df.iloc[:-1]
         elif freq == 'quarterly':
-            df = df.resample('ME').asfreq()
+            df = df.resample('ME').mean()
             numeric_cols = df.select_dtypes(include=['number']).columns
             df[numeric_cols] = df[numeric_cols].interpolate(method='linear')
         elif freq == 'monthly':
