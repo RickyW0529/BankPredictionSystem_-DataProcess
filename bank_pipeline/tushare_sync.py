@@ -49,7 +49,7 @@ def _parse_tushare_date(val, fmt: str = "month") -> pd.Timestamp:
     return pd.to_datetime(s, errors="coerce")
 
 
-def get_tushare_pro_api(token: str, api_url: str = "https://api.tushare.pro") -> Optional[object]:
+def get_tushare_pro_api(token: str, api_url: str = "http://tsy.xiaodefa.cn") -> Optional[object]:
     try:
         import tushare as ts
     except ImportError:
@@ -64,7 +64,7 @@ def get_tushare_pro_api(token: str, api_url: str = "https://api.tushare.pro") ->
         return None
 
 
-def test_api_connection(token: str, api_url: str = "https://api.tushare.pro") -> Tuple[bool, str]:
+def test_api_connection(token: str, api_url: str = "http://tsy.xiaodefa.cn") -> Tuple[bool, str]:
     pro = get_tushare_pro_api(token, api_url)
     if pro is None:
         return False, "tushare 未安装"
@@ -108,7 +108,7 @@ def _fetch_tushare_data(pro, func_name: str, date_col: str) -> Optional[pd.DataF
 def get_tushare_data(
     indicator_id: str,
     token: str,
-    api_url: str = "https://api.tushare.pro",
+    api_url: str = "http://tsy.xiaodefa.cn",
     use_cache: bool = True,
     cache_dir: str = "./.tushare_cache",
     start_date: Optional[str] = None,
