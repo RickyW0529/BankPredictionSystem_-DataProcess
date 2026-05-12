@@ -9,6 +9,7 @@ import os
 import platform
 import subprocess
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
@@ -60,7 +61,6 @@ def find_data_files(data_dir: str) -> list:
 
 def _render_indicator_selector(results, selected_key, freq_map, prefix, disabled=False):
     """Render grouped indicator selector with select-all/clear/invert."""
-    from collections import defaultdict
 
     # Group by frequency
     grouped = defaultdict(list)
@@ -73,10 +73,13 @@ def _render_indicator_selector(results, selected_key, freq_map, prefix, disabled
         "daily": "📅 日度指标",
         "monthly": "📆 月度指标",
         "quarterly": "📊 季度指标",
+        "unknown": "📁 其他指标",
     }
 
     # Stats metric
-    selected_set = st.session_state.get(selected_key, set())
+    if selected_key not in st.session_state:
+        st.session_state[selected_key] = set()
+    selected_set = st.session_state[selected_key]
     total_results = len(results)
     st.metric("已选 / 总计", f"{len(selected_set)} / {total_results}")
 
@@ -86,11 +89,15 @@ def _render_indicator_selector(results, selected_key, freq_map, prefix, disabled
         if st.button("✅ 全选", key=f"{prefix}_select_all", use_container_width=True, disabled=disabled):
             for item in results:
                 st.session_state[selected_key].add(item["id"])
+            for item in results:
+                st.session_state.pop(f"{prefix}_chk_{item['id']}", None)
             st.rerun()
     with col2:
         if st.button("❌ 清空", key=f"{prefix}_clear_all", use_container_width=True, disabled=disabled):
             for item in results:
                 st.session_state[selected_key].discard(item["id"])
+            for item in results:
+                st.session_state.pop(f"{prefix}_chk_{item['id']}", None)
             st.rerun()
     with col3:
         if st.button("🔄 反选", key=f"{prefix}_invert", use_container_width=True, disabled=disabled):
@@ -99,6 +106,8 @@ def _render_indicator_selector(results, selected_key, freq_map, prefix, disabled
                     st.session_state[selected_key].discard(item["id"])
                 else:
                     st.session_state[selected_key].add(item["id"])
+            for item in results:
+                st.session_state.pop(f"{prefix}_chk_{item['id']}", None)
             st.rerun()
 
     # Grouped expanders
