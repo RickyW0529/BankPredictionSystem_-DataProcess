@@ -59,7 +59,7 @@ def find_data_files(data_dir: str) -> list:
 
 
 # Page navigation
-page = st.sidebar.radio("页面", ["本地数据处理", "AkShare 宏观数据同步", "Tushare 宏观数据补充"])
+page = st.sidebar.radio("页面", ["本地数据处理", "AkShare 宏观数据同步", "Tushare 宏观数据同步"])
 
 # ===== Sidebar: Configuration =====
 st.sidebar.title("⚙️ 参数配置")
@@ -273,8 +273,8 @@ elif page == "AkShare 宏观数据同步":
     st.markdown("---")
     st.caption("数据来源于 AkShare 开源财经数据接口")
 
-elif page == "Tushare 宏观数据补充":
-    st.title("📡 Tushare 宏观数据补充")
+elif page == "Tushare 宏观数据同步":
+    st.title("📡 Tushare 宏观数据同步")
     st.markdown("从 Tushare Pro 搜索、勾选、预览宏观数据，一键合并导出")
 
     from bank_pipeline.tushare_sync import (
