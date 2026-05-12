@@ -161,28 +161,35 @@ st.sidebar.info(
 
 if page == "本地数据处理":
     st.title("🏦 银行预测数据处理系统")
-    st.markdown("上传数据文件 → 点击处理 → 下载结果")
+    st.markdown("上传日度、月度、季度数据文件 → 点击处理 → 下载结果")
 
-    data_dir = "./raw_data"
     output_dir = "./output"
-    raw_path = Path(data_dir)
 
     st.header("📂 数据上传")
 
-    uploaded_files = st.file_uploader(
-        "上传数据文件（支持 CSV、Excel）",
-        type=["csv", "xlsx", "xls"],
-        accept_multiple_files=True,
-    )
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        daily_files = st.file_uploader(
+            "📅 日度数据", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="daily_uploader"
+        )
+    with col2:
+        monthly_files = st.file_uploader(
+            "📆 月度数据", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="monthly_uploader"
+        )
+    with col3:
+        quarterly_files = st.file_uploader(
+            "📊 季度数据", type=["csv", "xlsx", "xls"], accept_multiple_files=True, key="quarterly_uploader"
+        )
 
-    if uploaded_files:
-        st.success(f"✅ 已上传 {len(uploaded_files)} 个文件")
-        for f in uploaded_files:
-            st.write(f"- `{f.name}`")
+    all_uploaded = daily_files + monthly_files + quarterly_files
 
+    if all_uploaded:
+        st.success(f"✅ 已上传 {len(all_uploaded)} 个文件（日度 {len(daily_files)} / 月度 {len(monthly_files)} / 季度 {len(quarterly_files)}）")
+
+        # Preview
         st.subheader("数据预览（前5行）")
-        tabs = st.tabs([f.name for f in uploaded_files])
-        for tab, f in zip(tabs, uploaded_files):
+        preview_tabs = st.tabs([f.name for f in all_uploaded])
+        for tab, f in zip(preview_tabs, all_uploaded):
             with tab:
                 try:
                     if f.name.endswith(".csv"):
@@ -200,71 +207,93 @@ if page == "本地数据处理":
     log_container = st.empty()
 
     if run_clicked:
-        if not uploaded_files:
+        if not all_uploaded:
             st.error("❌ 请先上传数据文件")
             st.stop()
 
-        raw_path.mkdir(parents=True, exist_ok=True)
-        for old_file in raw_path.glob("*"):
-            if old_file.is_file():
-                old_file.unlink()
+        # Read all files into memory DataFrames
+        from bank_pipeline.loader import detect_date_column, parse_date_column
 
-        for f in uploaded_files:
-            file_path = raw_path / f.name
-            with open(file_path, "wb") as out:
-                out.write(f.getvalue())
+        data_list = []
 
-        cmd = [
-            sys.executable, "main.py",
-            "--data-dir", data_dir,
-            "--output-dir", output_dir,
-            "--missing-value-threshold", str(missing_threshold),
-        ]
+        for freq, files in [("daily", daily_files), ("monthly", monthly_files), ("quarterly", quarterly_files)]:
+            for f in files:
+                try:
+                    if f.name.endswith(".csv"):
+                        df = pd.read_csv(f)
+                    else:
+                        df = pd.read_excel(f)
+                except Exception as e:
+                    st.error(f"读取 {f.name} 失败: {e}")
+                    st.stop()
 
-        logs = []
+                date_col = detect_date_column(df, ["Date", "date", "日期", "月份", "季度", "时间"])
+                if date_col is None:
+                    st.error(f"❌ {f.name}: 未找到日期列")
+                    st.stop()
+
+                df[date_col] = parse_date_column(df[date_col])
+                df = df.dropna(subset=[date_col]).sort_values(date_col)
+                data_list.append((df, date_col, freq))
+
+        # Run pipeline in-memory
+        import io, logging
+        log_stream = io.StringIO()
+        handler = logging.StreamHandler(log_stream)
+        handler.setLevel(logging.INFO)
+        formatter = logging.Formatter("%(asctime)s - %(message)s")
+        handler.setFormatter(formatter)
+        pipeline_logger = logging.getLogger("bank_pipeline")
+        pipeline_logger.addHandler(handler)
+        pipeline_logger.setLevel(logging.INFO)
+
         with st.spinner("正在处理，请稍候..."):
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                cwd=".",
-            )
-            for line in process.stdout:
-                logs.append(line)
-                display = "".join(logs[-80:])
-                log_container.text(display)
-            process.wait()
+            try:
+                from main import run_pipeline
+                result_df, metadata = run_pipeline(
+                    data_list=data_list,
+                    output_dir=output_dir,
+                    missing_value_threshold=missing_threshold,
+                    save_intermediate=True,
+                )
+                success = True
+            except Exception as e:
+                st.error(f"❌ 处理失败: {e}")
+                success = False
 
-        if process.returncode == 0:
+        # Display logs
+        log_text = log_stream.getvalue()
+        if log_text:
+            log_container.text(log_text[-2000:])  # show last 2000 chars
+
+        pipeline_logger.removeHandler(handler)
+
+        if success:
             st.success("✅ 处理完成！")
-        else:
-            st.error(f"❌ 处理失败，返回码: {process.returncode}")
-
-        st.header("📊 处理结果")
-        output_path = Path(output_dir)
-        if output_path.exists():
-            result_files = sorted(output_path.glob("*.csv"))
-            if result_files:
-                for rf in result_files:
-                    st.write(f"- `{rf.name}`")
-                    try:
-                        df_result = pd.read_csv(rf)
-                        st.caption(f"形状: {df_result.shape[0]} 行 × {df_result.shape[1]} 列")
-                        with open(rf, "rb") as f:
-                            st.download_button(
-                                label=f"⬇️ 下载 {rf.name}",
-                                data=f,
-                                file_name=rf.name,
-                                mime="text/csv",
-                                key=str(rf),
-                            )
-                    except Exception as e:
-                        st.error(f"读取结果失败: {e}")
+            st.header("📊 处理结果")
+            output_path = Path(output_dir)
+            if output_path.exists():
+                result_files = sorted(output_path.glob("*.csv"))
+                if result_files:
+                    for rf in result_files:
+                        st.write(f"- `{rf.name}`")
+                        try:
+                            df_result = pd.read_csv(rf)
+                            st.caption(f"形状: {df_result.shape[0]} 行 × {df_result.shape[1]} 列")
+                            with open(rf, "rb") as f:
+                                st.download_button(
+                                    label=f"⬇️ 下载 {rf.name}",
+                                    data=f,
+                                    file_name=rf.name,
+                                    mime="text/csv",
+                                    key=str(rf),
+                                )
+                        except Exception as e:
+                            st.error(f"读取结果失败: {e}")
+                else:
+                    st.info("output 目录下暂无 CSV 文件")
             else:
-                st.info("output 目录下暂无 CSV 文件")
-        else:
-            st.info("未找到 output 目录")
+                st.info("未找到 output 目录")
 
     st.markdown("---")
     st.caption("银行预测数据处理系统 | 基于 Streamlit 构建")
