@@ -97,10 +97,11 @@ def run_pipeline(
 
     logger.info("📂 Step 1: Loading data...")
 
+    loader = DataLoader(date_columns=settings.pipeline.data_config.date_columns)
+
     if data_list is None:
         if data_dir is None:
             raise ValueError("Either data_dir or data_list must be provided")
-        loader = DataLoader(date_columns=settings.pipeline.data_config.date_columns)
         data_list = loader.load_directory(data_dir, recursive=True)
 
     logger.info(f"   Loaded {len(data_list)} feature files")
