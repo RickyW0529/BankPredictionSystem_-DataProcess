@@ -35,15 +35,15 @@ def test_client_default_headers():
 
 
 @patch("bank_pipeline.ifind_sync.requests.post")
-def test_fetch_history_success(mock_post):
+def test_fetch_edb_success(mock_post):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {
         "code": 0,
         "data": {
             "table": [
-                ["20260101", "1.0"],
-                ["20260201", "2.0"],
+                ["2026-01-01", "1.0"],
+                ["2026-02-01", "2.0"],
             ],
             "header": ["时间", "CPI"],
         },
@@ -51,7 +51,7 @@ def test_fetch_history_success(mock_post):
     mock_post.return_value = mock_resp
 
     client = IFindClient(access_token="test_token")
-    df = client.fetch_history(indicator="M0000001", start_date="20260101", end_date="20260201")
+    df = client.fetch_edb(indicators="M0000001", start_date="2026-01-01", end_date="2026-02-01")
 
     assert df is not None
     assert len(df) == 2
@@ -62,7 +62,7 @@ def test_fetch_history_success(mock_post):
 
 
 @patch("bank_pipeline.ifind_sync.requests.post")
-def test_fetch_history_api_error(mock_post):
+def test_fetch_edb_api_error(mock_post):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {"code": -1, "message": "invalid indicator"}
@@ -70,23 +70,23 @@ def test_fetch_history_api_error(mock_post):
 
     client = IFindClient(access_token="test_token")
     with pytest.raises(RuntimeError, match="iFinD API request failed"):
-        client.fetch_history(indicator="INVALID")
+        client.fetch_edb(indicators="INVALID")
 
 
 @patch("bank_pipeline.ifind_sync.requests.post")
-def test_fetch_history_http_error(mock_post):
+def test_fetch_edb_http_error(mock_post):
     mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
     client = IFindClient(access_token="test_token")
     with pytest.raises(RuntimeError, match="iFinD API request failed for indicator M0000001"):
-        client.fetch_history(indicator="M0000001")
+        client.fetch_edb(indicators="M0000001")
 
 
 @patch("bank_pipeline.ifind_sync.requests.post")
 def test_test_connection_success(mock_post):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = {"code": 0, "data": {"table": [["20260101", "1.0"]], "header": ["时间", "CPI"]}}
+    mock_resp.json.return_value = {"code": 0, "data": {"table": [["2026-01-01", "1.0"]], "header": ["时间", "CPI"]}}
     mock_post.return_value = mock_resp
 
     client = IFindClient(access_token="test_token")
@@ -176,7 +176,7 @@ def test_get_ifind_catalog_merges_custom(tmp_path, monkeypatch):
 @patch("bank_pipeline.ifind_sync.IFindClient")
 def test_get_ifind_data_uses_catalog(mock_client_class):
     mock_client = MagicMock()
-    mock_client.fetch_history.return_value = pd.DataFrame({
+    mock_client.fetch_edb.return_value = pd.DataFrame({
         "指标名称": pd.to_datetime(["2026-01-01", "2026-02-01"]),
         "value": [1.0, 2.0],
     })
@@ -189,8 +189,8 @@ def test_get_ifind_data_uses_catalog(mock_client_class):
     )
     assert df is not None
     assert len(df) == 2
-    mock_client.fetch_history.assert_called_once()
-    call_args = mock_client.fetch_history.call_args
+    mock_client.fetch_edb.assert_called_once()
+    call_args = mock_client.fetch_edb.call_args
     assert call_args.args[0] == "M002826730"
 
 

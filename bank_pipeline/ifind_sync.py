@@ -171,14 +171,10 @@ def get_ifind_data(
     if df is None:
         logger.info("Fetching %s from iFinD...", indicator_id)
         client = IFindClient(access_token)
-        # Map catalog freq to iFinD API frequency parameter
-        freq_map = {"daily": "day", "monthly": "month", "quarterly": "quarter", "yearly": "year"}
-        api_freq = freq_map.get(meta.get("freq", "monthly"), "day")
-        df = client.fetch_history(
+        df = client.fetch_edb(
             indicator,
             start_date=start_date,
             end_date=end_date,
-            frequency=api_freq,
         )
         if df is not None and use_cache:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -296,56 +292,53 @@ class IFindClient:
             logger.error("iFinD HTTP request failed: %s", e)
             return None
 
-    def fetch_history(
+    def fetch_edb(
         self,
-        indicator: str,
+        indicators: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        frequency: str = "day",
     ) -> Optional[pd.DataFrame]:
-        """Fetch historical macro data for a given indicator.
+        """Fetch iFinD EDB (macroeconomic) data for a given indicator.
 
         Parameters
         ----------
-        indicator: str
-            iFinD indicator code (e.g. 'M0000001').
+        indicators: str
+            iFinD EDB indicator code (e.g. 'M0000001').
         start_date, end_date: str, optional
-            Date range in YYYYMMDD format.
-        frequency: str
-            'day', 'month', 'quarter', 'year'.
+            Date range in YYYY-MM-DD format.
 
         Returns
         -------
         pd.DataFrame or None
         """
         payload = {
-            "indicator": indicator,
-            "frequency": frequency,
+            "indicators": indicators,
         }
         if start_date:
-            payload["start_date"] = start_date
+            payload["startdate"] = start_date
         if end_date:
-            payload["end_date"] = end_date
+            payload["enddate"] = end_date
 
-        result = self._post("basic_data_service", payload)
+        result = self._post("edb_service", payload)
         if result is None:
-            raise RuntimeError(f"iFinD API request failed for indicator {indicator}")
+            raise RuntimeError(f"iFinD API request failed for indicator {indicators}")
         if "data" not in result:
-            raise RuntimeError(f"iFinD API response missing 'data' field for indicator {indicator}")
+            logger.warning("iFinD API response for %s: %s", indicators, json.dumps(result, ensure_ascii=False))
+            raise RuntimeError(f"iFinD API response missing 'data' field for indicator {indicators}. Response keys: {list(result.keys())}")
 
         data = result["data"]
         table = data.get("table", [])
         header = data.get("header", [])
 
         if not table or not header:
-            raise RuntimeError(f"iFinD returned empty data for indicator {indicator}")
+            raise RuntimeError(f"iFinD returned empty data for indicator {indicators}")
 
         df = pd.DataFrame(table, columns=header)
 
         # Detect date column (usually the first column) and parse
         date_col = header[0] if header else None
         if date_col is None:
-            logger.warning("No header found for indicator %s", indicator)
+            logger.warning("No header found for indicator %s", indicators)
             return None
 
         df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
@@ -362,7 +355,7 @@ class IFindClient:
     def test_connection(self) -> bool:
         """Test if the access_token is valid."""
         try:
-            result = self._post("basic_data_service", {"indicator": "M0000001", "limit": 1})
+            result = self._post("edb_service", {"indicators": "M0000001", "startdate": "20240101", "enddate": "20240101"})
             return result is not None
         except Exception:
             return False
@@ -380,7 +373,6 @@ def fetch_ifind_indicator(
     access_token: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    frequency: str = "day",
 ) -> Optional[pd.DataFrame]:
     client = get_ifind_client(access_token)
-    return client.fetch_history(indicator, start_date, end_date, frequency)
+    return client.fetch_edb(indicator, start_date, end_date)
