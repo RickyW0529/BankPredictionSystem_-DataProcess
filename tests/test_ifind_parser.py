@@ -80,3 +80,60 @@ def test_parse_ifind_excel_daily_no_metadata():
     assert result["data_cols"] == ["价格"]
     assert result["freq"] in ("daily", "unknown")
     assert len(result["data"]) == 3
+
+
+REFERENCE_DIR = os.path.join(os.path.dirname(__file__), "..", "docs", "Reference data table")
+
+
+@pytest.mark.skipif(
+    not os.path.exists(REFERENCE_DIR),
+    reason="Reference data directory not found",
+)
+def test_parse_real_monthly_cpi():
+    """Parse the real monthly CPI Excel file."""
+    files = [f for f in os.listdir(REFERENCE_DIR) if "CPI" in f and f.endswith(".xlsx")]
+    if not files:
+        pytest.skip("CPI reference file not found")
+    path = os.path.join(REFERENCE_DIR, files[0])
+    df_raw = pd.read_excel(path)
+    result = parse_ifind_excel(df_raw)
+    assert result["date_col"] == "指标名称"
+    assert result["freq"] == "monthly"
+    assert len(result["data_cols"]) >= 1
+    assert len(result["data"]) > 10
+
+
+@pytest.mark.skipif(
+    not os.path.exists(REFERENCE_DIR),
+    reason="Reference data directory not found",
+)
+def test_parse_real_quarterly_gdp():
+    """Parse the real quarterly GDP Excel file."""
+    files = [f for f in os.listdir(REFERENCE_DIR) if "GDP" in f and f.endswith(".xlsx")]
+    if not files:
+        pytest.skip("GDP reference file not found")
+    path = os.path.join(REFERENCE_DIR, files[0])
+    df_raw = pd.read_excel(path)
+    result = parse_ifind_excel(df_raw)
+    assert result["date_col"] == "指标名称"
+    assert result["freq"] == "quarterly"
+    assert len(result["data_cols"]) >= 1
+    assert len(result["data"]) > 4
+
+
+@pytest.mark.skipif(
+    not os.path.exists(REFERENCE_DIR),
+    reason="Reference data directory not found",
+)
+def test_parse_real_daily_spot_price():
+    """Parse the real daily spot price Excel file."""
+    files = [f for f in os.listdir(REFERENCE_DIR) if "现货价" in f and f.endswith(".xlsx")]
+    if not files:
+        pytest.skip("Spot price reference file not found")
+    path = os.path.join(REFERENCE_DIR, files[0])
+    df_raw = pd.read_excel(path)
+    result = parse_ifind_excel(df_raw)
+    assert result["date_col"] == "指标名称"
+    # Daily data may not have metadata rows; freq detected from dates
+    assert len(result["data_cols"]) >= 1
+    assert len(result["data"]) > 10
