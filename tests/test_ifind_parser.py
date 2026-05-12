@@ -94,7 +94,7 @@ def test_parse_real_monthly_cpi():
     files = [f for f in os.listdir(REFERENCE_DIR) if "CPI" in f and f.endswith(".xlsx")]
     if not files:
         pytest.skip("CPI reference file not found")
-    path = os.path.join(REFERENCE_DIR, files[0])
+    path = os.path.join(REFERENCE_DIR, sorted(files)[0])
     df_raw = pd.read_excel(path)
     result = parse_ifind_excel(df_raw)
     assert result["date_col"] == "指标名称"
@@ -112,7 +112,7 @@ def test_parse_real_quarterly_gdp():
     files = [f for f in os.listdir(REFERENCE_DIR) if "GDP" in f and f.endswith(".xlsx")]
     if not files:
         pytest.skip("GDP reference file not found")
-    path = os.path.join(REFERENCE_DIR, files[0])
+    path = os.path.join(REFERENCE_DIR, sorted(files)[0])
     df_raw = pd.read_excel(path)
     result = parse_ifind_excel(df_raw)
     assert result["date_col"] == "指标名称"
@@ -130,10 +130,11 @@ def test_parse_real_daily_spot_price():
     files = [f for f in os.listdir(REFERENCE_DIR) if "现货价" in f and f.endswith(".xlsx")]
     if not files:
         pytest.skip("Spot price reference file not found")
-    path = os.path.join(REFERENCE_DIR, files[0])
+    path = os.path.join(REFERENCE_DIR, sorted(files)[0])
     df_raw = pd.read_excel(path)
     result = parse_ifind_excel(df_raw)
     assert result["date_col"] == "指标名称"
     # Daily data may not have metadata rows; freq detected from dates
+    assert result["freq"] in ("daily", "unknown")
     assert len(result["data_cols"]) >= 1
     assert len(result["data"]) > 10
