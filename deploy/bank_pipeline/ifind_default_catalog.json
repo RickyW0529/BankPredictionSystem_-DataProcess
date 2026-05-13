@@ -1,0 +1,458 @@
+[
+  {
+    "id": "平均批发价_猪肉",
+    "name": "平均批发价:猪肉",
+    "freq": "daily",
+    "indicator": "S002808935"
+  },
+  {
+    "id": "水泥价格指数_全国",
+    "name": "水泥价格指数:全国",
+    "freq": "daily",
+    "indicator": "S004369601"
+  },
+  {
+    "id": "贷款市场报价利率_LPR__1年",
+    "name": "贷款市场报价利率(LPR):1年",
+    "freq": "daily",
+    "indicator": "L004609506"
+  },
+  {
+    "id": "贷款市场报价利率_LPR__5年",
+    "name": "贷款市场报价利率(LPR):5年",
+    "freq": "daily",
+    "indicator": "L004609507"
+  },
+  {
+    "id": "沪深300指数",
+    "name": "沪深300指数",
+    "freq": "daily",
+    "indicator": "M002845714"
+  },
+  {
+    "id": "CPI_当月同比",
+    "name": "CPI:当月同比",
+    "freq": "monthly",
+    "indicator": "M002826730"
+  },
+  {
+    "id": "CPI_食品_当月同比",
+    "name": "CPI:食品:当月同比",
+    "freq": "monthly",
+    "indicator": "M002826732"
+  },
+  {
+    "id": "CPI_非食品_当月同比",
+    "name": "CPI:非食品:当月同比",
+    "freq": "monthly",
+    "indicator": "M002826748"
+  },
+  {
+    "id": "CPI_服务项目_当月同比",
+    "name": "CPI:服务项目:当月同比",
+    "freq": "monthly",
+    "indicator": "M002840898"
+  },
+  {
+    "id": "CPI_消费品_当月同比",
+    "name": "CPI:消费品:当月同比",
+    "freq": "monthly",
+    "indicator": "M002840897"
+  },
+  {
+    "id": "CPI_居住_当月同比",
+    "name": "CPI:居住:当月同比",
+    "freq": "monthly",
+    "indicator": "M002826746"
+  },
+  {
+    "id": "CPI_衣着_当月同比",
+    "name": "CPI:衣着:当月同比",
+    "freq": "monthly",
+    "indicator": "M002826736"
+  },
+  {
+    "id": "CPI_医疗保健_当月同比",
+    "name": "CPI:医疗保健:当月同比",
+    "freq": "monthly",
+    "indicator": "M004164296"
+  },
+  {
+    "id": "CPI_交通和通信_当月同比",
+    "name": "CPI:交通和通信:当月同比",
+    "freq": "monthly",
+    "indicator": "M002826742"
+  },
+  {
+    "id": "CPI_教育文化和娱乐_当月同比",
+    "name": "CPI:教育文化和娱乐:当月同比",
+    "freq": "monthly",
+    "indicator": "M004164293"
+  },
+  {
+    "id": "PPI_当月同比",
+    "name": "PPI:当月同比",
+    "freq": "monthly",
+    "indicator": "M002826865"
+  },
+  {
+    "id": "房屋竣工面积_累计同比",
+    "name": "房屋竣工面积:累计同比",
+    "freq": "monthly",
+    "indicator": "S002916788"
+  },
+  {
+    "id": "房屋新开工面积_累计同比",
+    "name": "房屋新开工面积:累计同比",
+    "freq": "monthly",
+    "indicator": "M004385561"
+  },
+  {
+    "id": "商品房销售面积_累计同比",
+    "name": "商品房销售面积:累计同比",
+    "freq": "monthly",
+    "indicator": "S002916792"
+  },
+  {
+    "id": "全国_商品房销售额_累计值",
+    "name": "全国:商品房销售额:累计值",
+    "freq": "monthly",
+    "indicator": "M001636938"
+  },
+  {
+    "id": "商品房销售面积_累计值",
+    "name": "商品房销售面积:累计值",
+    "freq": "monthly",
+    "indicator": "S000047990"
+  },
+  {
+    "id": "商品房销售额_累计同比",
+    "name": "商品房销售额:累计同比",
+    "freq": "monthly",
+    "indicator": "S000047995"
+  },
+  {
+    "id": "规模以上工业增加值_累计同比",
+    "name": "规模以上工业增加值:累计同比",
+    "freq": "monthly",
+    "indicator": "M001622303"
+  },
+  {
+    "id": "规模以上工业增加值_当月同比",
+    "name": "规模以上工业增加值:当月同比",
+    "freq": "monthly",
+    "indicator": "M001622302"
+  },
+  {
+    "id": "规模以上工业增加值_制造业_当月同比",
+    "name": "规模以上工业增加值:制造业:当月同比",
+    "freq": "monthly",
+    "indicator": "M004369928"
+  },
+  {
+    "id": "规模以上工业增加值_汽车制造业_当月同比",
+    "name": "规模以上工业增加值:汽车制造业:当月同比",
+    "freq": "monthly",
+    "indicator": "M002917553"
+  },
+  {
+    "id": "规模以上工业增加值_高技术制造业_累计同比",
+    "name": "规模以上工业增加值:高技术制造业:累计同比",
+    "freq": "monthly",
+    "indicator": "M004496281"
+  },
+  {
+    "id": "规模以上工业增加值_通用设备制造业_当月同比",
+    "name": "规模以上工业增加值:通用设备制造业:当月同比",
+    "freq": "monthly",
+    "indicator": "M002853505"
+  },
+  {
+    "id": "中国零售业景气指数_CRPI",
+    "name": "中国零售业景气指数(CRPI)",
+    "freq": "monthly",
+    "indicator": "M012637418"
+  },
+  {
+    "id": "汽车类商品零售类值_当月值",
+    "name": "汽车类商品零售类值:当月值",
+    "freq": "monthly",
+    "indicator": "M005390238"
+  },
+  {
+    "id": "汽车类商品零售类值_当月同比",
+    "name": "汽车类商品零售类值:当月同比",
+    "freq": "monthly",
+    "indicator": "M001625662"
+  },
+  {
+    "id": "汽车销量_当月值",
+    "name": "汽车销量:当月值",
+    "freq": "monthly",
+    "indicator": "S002811517"
+  },
+  {
+    "id": "新能源汽车_销量_当月值",
+    "name": "新能源汽车:销量:当月值",
+    "freq": "monthly",
+    "indicator": "S003018848"
+  },
+  {
+    "id": "社会消费品零售总额_当月同比",
+    "name": "社会消费品零售总额:当月同比",
+    "freq": "monthly",
+    "indicator": "M001625520"
+  },
+  {
+    "id": "社会消费品零售总额_累计同比",
+    "name": "社会消费品零售总额:累计同比",
+    "freq": "monthly",
+    "indicator": "M001625521"
+  },
+  {
+    "id": "社会消费品零售总额_当月值",
+    "name": "社会消费品零售总额:当月值",
+    "freq": "monthly",
+    "indicator": "M001625518"
+  },
+  {
+    "id": "社会消费品零售总额_累计值",
+    "name": "社会消费品零售总额:累计值",
+    "freq": "monthly",
+    "indicator": "M001625519"
+  },
+  {
+    "id": "社会消费品零售总额_餐饮业_当月同比",
+    "name": "社会消费品零售总额:餐饮业:当月同比",
+    "freq": "monthly",
+    "indicator": "M001625542"
+  },
+  {
+    "id": "社会消费品零售总额_城镇_当月同比",
+    "name": "社会消费品零售总额:城镇:当月同比",
+    "freq": "monthly",
+    "indicator": "M002890628"
+  },
+  {
+    "id": "社会消费品零售总额_乡村_当月同比",
+    "name": "社会消费品零售总额:乡村:当月同比",
+    "freq": "monthly",
+    "indicator": "M002890632"
+  },
+  {
+    "id": "商品零售_当月同比",
+    "name": "商品零售:当月同比",
+    "freq": "monthly",
+    "indicator": "M002890644"
+  },
+  {
+    "id": "餐饮收入_当月同比",
+    "name": "餐饮收入:当月同比",
+    "freq": "monthly",
+    "indicator": "M002890640"
+  },
+  {
+    "id": "金银珠宝类商品零售类值_当月同比",
+    "name": "金银珠宝类商品零售类值:当月同比",
+    "freq": "monthly",
+    "indicator": "M001625572"
+  },
+  {
+    "id": "金银珠宝类商品零售类值_当月值",
+    "name": "金银珠宝类商品零售类值:当月值",
+    "freq": "monthly",
+    "indicator": "M005390236"
+  },
+  {
+    "id": "通讯器材类商品零售类值_当月同比",
+    "name": "通讯器材类商品零售类值:当月同比",
+    "freq": "monthly",
+    "indicator": "M001625622"
+  },
+  {
+    "id": "建筑及装潢材料类商品零售类值_当月同比",
+    "name": "建筑及装潢材料类商品零售类值:当月同比",
+    "freq": "monthly",
+    "indicator": "M001625652"
+  },
+  {
+    "id": "家用电器和音像器材类商品零售类值_当月同比",
+    "name": "家用电器和音像器材类商品零售类值:当月同比",
+    "freq": "monthly",
+    "indicator": "M001625602"
+  },
+  {
+    "id": "家具类商品零售类值_当月同比",
+    "name": "家具类商品零售类值:当月同比",
+    "freq": "monthly",
+    "indicator": "M001625617"
+  },
+  {
+    "id": "消费者指数_信心指数",
+    "name": "消费者指数:信心指数",
+    "freq": "monthly",
+    "indicator": "M002807951"
+  },
+  {
+    "id": "消费者信心指数_收入",
+    "name": "消费者信心指数:收入",
+    "freq": "monthly",
+    "indicator": "M015842345"
+  },
+  {
+    "id": "消费者信心指数_就业",
+    "name": "消费者信心指数:就业",
+    "freq": "monthly",
+    "indicator": "M015842342"
+  },
+  {
+    "id": "消费者信心指数_消费意愿",
+    "name": "消费者信心指数:消费意愿",
+    "freq": "monthly",
+    "indicator": "M015842348"
+  },
+  {
+    "id": "全国建材家居景气指数_BHI",
+    "name": "全国建材家居景气指数(BHI)",
+    "freq": "monthly",
+    "indicator": "S003144983"
+  },
+  {
+    "id": "中小企业发展指数_SMEDI__总指数",
+    "name": "中小企业发展指数(SMEDI):总指数",
+    "freq": "monthly",
+    "indicator": "M006012203"
+  },
+  {
+    "id": "M1_货币__同比",
+    "name": "M1(货币):同比",
+    "freq": "monthly",
+    "indicator": "M001625224"
+  },
+  {
+    "id": "M2_货币和准货币__同比",
+    "name": "M2(货币和准货币):同比",
+    "freq": "monthly",
+    "indicator": "M001625222"
+  },
+  {
+    "id": "社会融资规模增量_当月值",
+    "name": "社会融资规模增量:当月值",
+    "freq": "monthly",
+    "indicator": "M004891015"
+  },
+  {
+    "id": "全国银行间质押式回购交易_加权平均利率_14天",
+    "name": "全国银行间质押式回购交易:加权平均利率:14天",
+    "freq": "monthly",
+    "indicator": "S002838675"
+  },
+  {
+    "id": "制造业PMI",
+    "name": "制造业PMI",
+    "freq": "monthly",
+    "indicator": "M002043802"
+  },
+  {
+    "id": "制造业PMI_产成品库存",
+    "name": "制造业PMI:产成品库存",
+    "freq": "monthly",
+    "indicator": "M002043807"
+  },
+  {
+    "id": "全国城镇调查失业率",
+    "name": "全国城镇调查失业率",
+    "freq": "monthly",
+    "indicator": "M004490200"
+  },
+  {
+    "id": "GDP_现价_当季值",
+    "name": "GDP:现价:当季值",
+    "freq": "quarterly",
+    "indicator": "M004103409"
+  },
+  {
+    "id": "GDP_现价_第三产业_当季值",
+    "name": "GDP:现价:第三产业:当季值",
+    "freq": "quarterly",
+    "indicator": "M004103415"
+  },
+  {
+    "id": "GDP_不变价_第三产业_当季值",
+    "name": "GDP:不变价:第三产业:当季值",
+    "freq": "quarterly",
+    "indicator": "M004109284"
+  },
+  {
+    "id": "GDP_不变价_第三产业_当季同比",
+    "name": "GDP:不变价:第三产业:当季同比",
+    "freq": "quarterly",
+    "indicator": "M004103428"
+  },
+  {
+    "id": "GDP_不变价_当季同比",
+    "name": "GDP:不变价:当季同比",
+    "freq": "quarterly",
+    "indicator": "M002834227"
+  },
+  {
+    "id": "GDP_不变价_当季值",
+    "name": "GDP:不变价:当季值",
+    "freq": "quarterly",
+    "indicator": "M004109281"
+  },
+  {
+    "id": "城镇居民人均可支配收入_累计值",
+    "name": "城镇居民人均可支配收入:累计值",
+    "freq": "quarterly",
+    "indicator": "M004411392"
+  },
+  {
+    "id": "城镇居民人均可支配收入_累计同比",
+    "name": "城镇居民人均可支配收入:累计同比",
+    "freq": "quarterly",
+    "indicator": "M004411393"
+  },
+  {
+    "id": "城镇居民人均可支配收入_中位数_累计同比",
+    "name": "城镇居民人均可支配收入:中位数:累计同比",
+    "freq": "quarterly",
+    "indicator": "M004411396"
+  },
+  {
+    "id": "居民人均可支配收入_累计值",
+    "name": "居民人均可支配收入:累计值",
+    "freq": "quarterly",
+    "indicator": "M004221868"
+  },
+  {
+    "id": "居民人均可支配收入_中位数_累计值",
+    "name": "居民人均可支配收入:中位数:累计值",
+    "freq": "quarterly",
+    "indicator": "M004221869"
+  },
+  {
+    "id": "居民部门杠杆率",
+    "name": "居民部门杠杆率",
+    "freq": "quarterly",
+    "indicator": "M004468618"
+  },
+  {
+    "id": "新发放贷款加权平均利率_一般贷款",
+    "name": "新发放贷款加权平均利率:一般贷款",
+    "freq": "quarterly",
+    "indicator": "M002912241"
+  },
+  {
+    "id": "新发放贷款加权平均利率_个人住房贷款",
+    "name": "新发放贷款加权平均利率:个人住房贷款",
+    "freq": "quarterly",
+    "indicator": "M002912243"
+  },
+  {
+    "id": "工业产能利用率_当季值",
+    "name": "工业产能利用率:当季值",
+    "freq": "quarterly",
+    "indicator": "M004385514"
+  }
+]

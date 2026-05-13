@@ -31,14 +31,6 @@ output/
 .streamlit/
 .worktrees/
 
-# Deploy artifacts
-deploy/.venv/
-deploy/output/
-deploy/.akshare_cache/
-deploy/.tushare_cache/
-deploy/.ifind_cache/
-deploy/.ifind_config.json
-
 # Reference data (large binary files, keep local only)
 docs/Reference data table/*.xlsx
 docs/Reference data table/*.xls
