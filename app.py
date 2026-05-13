@@ -618,9 +618,9 @@ elif page == "同花顺 iFinD 宏观数据同步":
         clear_ifind_token,
     )
 
-    # Format dates for iFinD EDB API (YYYY-MM-DD)
-    ifind_start = start_date.strftime("%Y-%m-%d") if start_date else None
-    ifind_end = end_date.strftime("%Y-%m-%d") if end_date else None
+    # Format dates for iFinD EDB API (YYYYMMDD)
+    ifind_start = start_date.strftime("%Y%m%d") if start_date else None
+    ifind_end = end_date.strftime("%Y%m%d") if end_date else None
 
     # ── API 配置卡片 ──────────────────────────────────────
     with st.container(border=True):
