@@ -315,29 +315,26 @@ if page == "本地数据处理":
         if success:
             st.success("✅ 处理完成！")
             st.header("📊 处理结果")
-            output_path = Path(output_dir)
-            if output_path.exists():
-                result_files = sorted(output_path.glob("*.csv"))
-                if result_files:
-                    for rf in result_files:
-                        st.write(f"- `{rf.name}`")
-                        try:
-                            df_result = pd.read_csv(rf)
-                            st.caption(f"形状: {df_result.shape[0]} 行 × {df_result.shape[1]} 列")
-                            with open(rf, "rb") as f:
-                                st.download_button(
-                                    label=f"⬇️ 下载 {rf.name}",
-                                    data=f,
-                                    file_name=rf.name,
-                                    mime="text/csv",
-                                    key=str(rf),
-                                )
-                        except Exception as e:
-                            st.error(f"读取结果失败: {e}")
-                else:
-                    st.info("output 目录下暂无 CSV 文件")
+            result_files = metadata.get("output_files", [])
+            if result_files:
+                for rf_path in result_files:
+                    rf = Path(rf_path)
+                    st.write(f"- `{rf.name}`")
+                    try:
+                        df_result = pd.read_csv(rf)
+                        st.caption(f"形状: {df_result.shape[0]} 行 × {df_result.shape[1]} 列")
+                        with open(rf, "rb") as f:
+                            st.download_button(
+                                label=f"⬇️ 下载 {rf.name}",
+                                data=f,
+                                file_name=rf.name,
+                                mime="text/csv",
+                                key=str(rf),
+                            )
+                    except Exception as e:
+                        st.error(f"读取结果失败: {e}")
             else:
-                st.info("未找到 output 目录")
+                st.info("本次运行未生成输出文件")
 
     st.markdown("---")
     st.caption("银行预测数据处理系统 | 基于 Streamlit 构建")

@@ -111,17 +111,20 @@ def run_pipeline(
     df_features = cleaner.merge_dataframes(data_list)
     logger.info(f"   Merged features shape: {df_features.shape}")
 
+    output_files = []
+
     if save_intermediate or target_file is None:
-        output_path = Path(output_dir) / "features_merged.csv"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        df_features.to_csv(output_path, index=False)
-        logger.info(f"   💾 Saved merged features to {output_path}")
+        merged_path = Path(output_dir) / "features_merged.csv"
+        merged_path.parent.mkdir(parents=True, exist_ok=True)
+        df_features.to_csv(merged_path, index=False)
+        logger.info(f"   💾 Saved merged features to {merged_path}")
+        output_files.append(str(merged_path))
 
     if target_file is None:
         logger.info("=" * 50)
         logger.info("✅ Merge-only mode complete!")
         logger.info("=" * 50)
-        return df_features, {"mode": "merge_only", "shape": df_features.shape}
+        return df_features, {"mode": "merge_only", "shape": df_features.shape, "output_files": output_files}
 
     logger.info("📊 Step 3: Loading target variable...")
     target_df, target_date_col = loader.load_file(target_file)
@@ -157,6 +160,10 @@ def run_pipeline(
             max_feature_ratio=max_feature_ratio,
             output_dir=output_dir
         )
+
+    if "output_file" in metadata:
+        output_files.append(metadata["output_file"])
+    metadata["output_files"] = output_files
 
     logger.info("=" * 50)
     logger.info("✅ Pipeline Complete!")

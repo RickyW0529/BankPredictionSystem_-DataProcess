@@ -176,13 +176,14 @@ class FeatureEngineer:
             "final_pca_features": final_df.shape[1] - 1,
             "explained_variance": explained_variance
         }
-        
+
         if output_dir:
             output_path = Path(output_dir) / "train_pca.csv"
             output_path.parent.mkdir(parents=True, exist_ok=True)
             final_df.to_csv(output_path)
             logger.info(f"✅ Saved to {output_path}")
-        
+            metadata["output_file"] = str(output_path)
+
         logger.info(f"✅ Complete. Final shape: {final_df.shape}")
         return final_df, metadata
     
@@ -209,13 +210,14 @@ class FeatureEngineer:
         final_df = pd.concat([df_shifted, y], axis=1)
         
         metadata = {"method": "simple", "features": df_shifted.shape[1]}
-        
+
         if output_dir:
             output_path = Path(output_dir) / "train_simple.csv"
             output_path.parent.mkdir(parents=True, exist_ok=True)
             final_df.to_csv(output_path)
             logger.info(f"✅ Saved to {output_path}")
-        
+            metadata["output_file"] = str(output_path)
+
         return final_df, metadata
 
     def process_no_pca(
@@ -273,12 +275,13 @@ class FeatureEngineer:
             "n_samples": n_samples,
             "max_feature_ratio": max_feature_ratio
         }
-        
+
         if output_dir:
             output_path = Path(output_dir) / "train_no_pca.csv"
             output_path.parent.mkdir(parents=True, exist_ok=True)
             final_df.to_csv(output_path)
             logger.info(f"✅ Saved to {output_path}")
-        
+            metadata["output_file"] = str(output_path)
+
         logger.info(f"✅ Complete. Final shape: {final_df.shape}")
         return final_df, metadata
