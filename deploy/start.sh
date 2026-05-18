@@ -55,7 +55,13 @@ echo "[3/5] 关键目录检查完成"
 echo "[4/5] 安装/更新依赖..."
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+
+if [ -d "wheels" ] && [ "$(ls -A wheels/*.whl 2>/dev/null | wc -l)" -gt 0 ]; then
+    echo "  检测到离线 wheel 包，使用本地安装..."
+    python -m pip install --no-index --find-links=wheels/ -r requirements.txt
+else
+    python -m pip install -r requirements.txt
+fi
 
 # 5. 启动 Streamlit
 echo "[5/5] 启动 Streamlit..."

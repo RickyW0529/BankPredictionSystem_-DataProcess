@@ -10,7 +10,9 @@ tsfresh>=0.20.0
 openpyxl>=3.1.0
 streamlit>=1.30.0
 
+# 网络请求（akshare 依赖）
+aiohttp>=3.11.13
+
 # 数据源
-# akshare 1.16.72+ 强制依赖 aiohttp>=3.11.13，部分环境无法提供，故限制上限
-akshare>=1.15.0,<1.16.72
+akshare>=1.15.0
 tushare>=1.4.0

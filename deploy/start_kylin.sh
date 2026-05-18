@@ -77,14 +77,22 @@ echo "[4/5] 安装/更新依赖..."
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip || true
 
-# 尝试默认源，失败则切换国内镜像
-echo "  尝试 PyPI 官方源..."
-if ! python -m pip install -r requirements.txt 2>/dev/null; then
-    echo "  官方源失败，切换至清华镜像..."
-    python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple || {
-        echo "[错误] 依赖安装失败，请检查网络连接或手动配置 pip 镜像。"
+if [ -d "wheels" ] && [ "$(ls -A wheels/*.whl 2>/dev/null | wc -l)" -gt 0 ]; then
+    echo "  检测到离线 wheel 包，使用本地安装..."
+    python -m pip install --no-index --find-links=wheels/ -r requirements.txt || {
+        echo "[错误] 本地 wheel 安装失败，请检查 wheel 包与系统平台是否匹配。"
         exit 1
     }
+else
+    # 尝试默认源，失败则切换国内镜像
+    echo "  尝试 PyPI 官方源..."
+    if ! python -m pip install -r requirements.txt 2>/dev/null; then
+        echo "  官方源失败，切换至清华镜像..."
+        python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple || {
+            echo "[错误] 依赖安装失败，请检查网络连接或手动配置 pip 镜像。"
+            exit 1
+        }
+    fi
 fi
 
 # 5. 启动 Streamlit

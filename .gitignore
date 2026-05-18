@@ -38,6 +38,8 @@ deploy/.akshare_cache/
 deploy/.tushare_cache/
 deploy/.ifind_cache/
 deploy/.ifind_config.json
+deploy/wheels/
+deploy.zip
 
 # Reference data (large binary files, keep local only)
 docs/Reference data table/*.xlsx
