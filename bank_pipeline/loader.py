@@ -91,7 +91,19 @@ def _read_broken_xlsx(file_path_or_buffer) -> pd.DataFrame:
                     row_data.append(data[r].get(c, None))
                 result.append(row_data)
 
-    return pd.DataFrame(result[1:], columns=result[0])
+    df = pd.DataFrame(result[1:], columns=result[0])
+    # Deduplicate column names (pandas read_excel appends .1, .2, etc.)
+    seen = {}
+    new_cols = []
+    for col in df.columns:
+        if col in seen:
+            seen[col] += 1
+            new_cols.append(f"{col}.{seen[col]}")
+        else:
+            seen[col] = 0
+            new_cols.append(col)
+    df.columns = new_cols
+    return df
 
 
 def safe_read_excel(file_path_or_buffer, **kwargs) -> pd.DataFrame:
