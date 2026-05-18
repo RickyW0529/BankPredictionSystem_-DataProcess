@@ -10,6 +10,9 @@ tsfresh>=0.20.0
 openpyxl>=3.1.0
 streamlit>=1.30.0
 
+# 网络请求（akshare 新版本依赖）
+aiohttp>=3.11.13
+
 # 数据源
 akshare>=1.15.0
 tushare>=1.4.0
