@@ -24,16 +24,35 @@ if [ -z "$PYTHON_CMD" ]; then
     exit 1
 fi
 
-PYTHON_VERSION=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+PYTHON_VERSION=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")')
 echo "[1/5] 检测到 Python $PYTHON_VERSION (命令: $PYTHON_CMD)"
 
-# 2. 创建虚拟环境
+# 2. 创建/校验虚拟环境
 VENV_DIR=".venv"
+NEED_CREATE=false
 if [ ! -d "$VENV_DIR" ]; then
-    echo "[2/5] 创建虚拟环境 ($VENV_DIR)..."
-    $PYTHON_CMD -m venv "$VENV_DIR"
+    NEED_CREATE=true
+    echo "[2/5] 虚拟环境不存在，准备创建..."
 else
-    echo "[2/5] 虚拟环境已存在"
+    if [ -f "$VENV_DIR/bin/python" ]; then
+        VENV_PY_VER=$("$VENV_DIR/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")' 2>/dev/null || echo "unknown")
+        if [ "$VENV_PY_VER" != "$PYTHON_VERSION" ]; then
+            echo "[2/5] 虚拟环境 Python 版本 ($VENV_PY_VER) 与系统 ($PYTHON_VERSION) 不一致，重新创建..."
+            rm -rf "$VENV_DIR"
+            NEED_CREATE=true
+        else
+            echo "[2/5] 虚拟环境已存在且版本一致"
+        fi
+    else
+        echo "[2/5] 虚拟环境损坏，重新创建..."
+        rm -rf "$VENV_DIR"
+        NEED_CREATE=true
+    fi
+fi
+
+if [ "$NEED_CREATE" = true ]; then
+    $PYTHON_CMD -m venv "$VENV_DIR"
+    echo "[2/5] 虚拟环境创建完成"
 fi
 
 # 3. 检查关键目录

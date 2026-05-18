@@ -1,4 +1,7 @@
 import re
+import zipfile
+import xml.etree.ElementTree as ET
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional, Tuple, List
 
@@ -11,6 +14,81 @@ def generate_clean_column_name(col_name: str) -> str:
     clean_name = col_name.lower().strip()
     clean_name = re.sub(r'[\s\(\)\-./]+', '_', clean_name)
     return clean_name.strip('_')
+
+
+def _read_broken_xlsx(file_path: str) -> pd.DataFrame:
+    """Read xlsx workbook with invalid XML (e.g. corrupted styles.xml) by manually parsing sheet XML."""
+    with zipfile.ZipFile(file_path, 'r') as z:
+        shared_strings = []
+        try:
+            with z.open('xl/sharedStrings.xml') as f:
+                sst = ET.parse(f).getroot()
+                ns_tag = sst.tag
+                if ns_tag.startswith('{'):
+                    ns_uri = ns_tag.split('}')[0][1:]
+                    ns = {'x': ns_uri}
+                    for si in sst.findall('.//x:si', ns):
+                        t = si.find('.//x:t', ns)
+                        shared_strings.append(t.text if t is not None else '')
+                else:
+                    for si in sst.findall('.//si'):
+                        t = si.find('.//t')
+                        shared_strings.append(t.text if t is not None else '')
+        except KeyError:
+            pass
+
+        with z.open('xl/worksheets/sheet1.xml') as f:
+            tree = ET.parse(f)
+            root = tree.getroot()
+
+            ns_tag = root.tag
+            if ns_tag.startswith('{'):
+                ns_uri = ns_tag.split('}')[0][1:]
+                ns = {'x': ns_uri}
+                row_tag = 'x:row'
+                c_tag = 'x:c'
+                v_tag = 'x:v'
+            else:
+                ns = {}
+                row_tag = 'row'
+                c_tag = 'c'
+                v_tag = 'v'
+
+            data = defaultdict(dict)
+            for row in root.findall(f'.//{row_tag}', ns):
+                row_idx = int(row.get('r'))
+                for cell in row.findall(f'.//{c_tag}', ns):
+                    cell_ref = cell.get('r')
+                    col_letters = ''.join([c for c in cell_ref if c.isalpha()])
+                    col_idx = 0
+                    for c in col_letters:
+                        col_idx = col_idx * 26 + (ord(c) - ord('A') + 1)
+
+                    cell_type = cell.get('t', 'n')
+                    v_elem = cell.find(v_tag, ns)
+                    val = v_elem.text if v_elem is not None else ''
+
+                    if cell_type == 's':
+                        idx = int(val) if val else 0
+                        val = shared_strings[idx] if 0 <= idx < len(shared_strings) else ''
+                    elif cell_type == 'str':
+                        val = val
+                    elif cell_type == 'n':
+                        val = float(val) if val else None
+
+                    data[row_idx][col_idx] = val
+
+            max_row = max(data.keys()) if data else 0
+            max_col = max(max(cols.keys()) for cols in data.values()) if data else 0
+
+            result = []
+            for r in range(1, max_row + 1):
+                row_data = []
+                for c in range(1, max_col + 1):
+                    row_data.append(data[r].get(c, None))
+                result.append(row_data)
+
+    return pd.DataFrame(result[1:], columns=result[0])
 
 
 def detect_date_column(df: pd.DataFrame, date_keywords: List[str]) -> Optional[str]:
@@ -34,13 +112,16 @@ def parse_date_column(series: pd.Series) -> pd.Series:
     
     if series_str.str.match(r'\d{4}-\d{2}-\d{2}').all():
         return pd.to_datetime(series_str, errors='coerce')
-    
+
+    if series_str.str.match(r'^\d{8}$').any():
+        return pd.to_datetime(series_str, format='%Y%m%d', errors='coerce')
+
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_datetime(series.astype(str), format='%Y%m%d', errors='coerce')
-    
+
     if series_str.str.match(r'\d{4}年\d{1,2}月').any():
         return pd.to_datetime(series_str.str.replace('年', '-').str.replace('月', ''), errors='coerce')
-    
+
     return pd.to_datetime(series_str, errors='coerce')
 
 
@@ -86,7 +167,13 @@ class DataLoader:
                 except UnicodeDecodeError:
                     df = pd.read_csv(file_path, encoding='gbk')
             elif path.suffix in ['.xlsx', '.xls']:
-                df = pd.read_excel(file_path)
+                try:
+                    df = pd.read_excel(file_path)
+                except Exception:
+                    if path.suffix == '.xlsx':
+                        df = _read_broken_xlsx(file_path)
+                    else:
+                        raise
             else:
                 raise ValueError(f"Unsupported file format: {path.suffix}")
         except Exception as e:
