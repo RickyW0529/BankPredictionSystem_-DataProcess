@@ -19,9 +19,22 @@ for cmd in python3 python3.10 python3.11 python3.12 /usr/bin/python3 /usr/local/
 done
 
 if [ -z "$PYTHON_CMD" ]; then
-    echo "[错误] 未检测到 python3，请先安装 Python 3.10 或更高版本。"
-    echo "  麒麟系统安装命令: sudo apt install python3 python3-venv python3-pip -y"
-    exit 1
+    echo "[1/5] 未检测到 python3，尝试自动安装..."
+    if command -v apt &> /dev/null; then
+        sudo apt update && sudo apt install python3 python3-venv python3-pip -y
+        # 重新探测
+        for cmd in python3 python3.10 python3.11 python3.12 /usr/bin/python3 /usr/local/bin/python3; do
+            if command -v "$cmd" &> /dev/null; then
+                PYTHON_CMD="$cmd"
+                break
+            fi
+        done
+    fi
+    if [ -z "$PYTHON_CMD" ]; then
+        echo "[错误] 自动安装失败，请手动安装 Python 3.10 或更高版本。"
+        echo "  麒麟系统安装命令: sudo apt install python3 python3-venv python3-pip -y"
+        exit 1
+    fi
 fi
 
 PYTHON_VERSION=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
@@ -35,7 +48,7 @@ if [ ! -d "$VENV_DIR" ]; then
     echo "[2/5] 虚拟环境不存在，准备创建..."
 else
     if [ -f "$VENV_DIR/bin/python" ]; then
-        VENV_PY_VER=$("$VENV_DIR/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")' 2>/dev/null || echo "unknown")
+        VENV_PY_VER=$("$VENV_DIR/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "unknown")
         if [ "$VENV_PY_VER" != "$PYTHON_VERSION" ]; then
             echo "[2/5] 虚拟环境 Python 版本 ($VENV_PY_VER) 与系统 ($PYTHON_VERSION) 不一致，重新创建..."
             rm -rf "$VENV_DIR"
