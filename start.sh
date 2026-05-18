@@ -27,7 +27,7 @@ if [ ! -d "$VENV_DIR" ]; then
 else
     # 检查虚拟环境中的 Python 版本是否与系统一致
     if [ -f "$VENV_DIR/bin/python" ]; then
-        VENV_PY_VER=$("$VENV_DIR/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")' 2>/dev/null || echo "unknown")
+        VENV_PY_VER=$("$VENV_DIR/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "unknown")
         if [ "$VENV_PY_VER" != "$PYTHON_VERSION" ]; then
             echo "[2/5] 虚拟环境 Python 版本 ($VENV_PY_VER) 与系统 ($PYTHON_VERSION) 不一致，重新创建..."
             rm -rf "$VENV_DIR"

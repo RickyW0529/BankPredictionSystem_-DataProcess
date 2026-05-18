@@ -44,7 +44,8 @@ def preview_csv(file_path: str, nrows: int = 5) -> pd.DataFrame:
         if path.suffix == ".csv":
             df = pd.read_csv(file_path, nrows=nrows)
         elif path.suffix in (".xlsx", ".xls"):
-            df = pd.read_excel(file_path, nrows=nrows)
+            from bank_pipeline.loader import safe_read_excel
+            df = safe_read_excel(file_path, nrows=nrows)
         else:
             return pd.DataFrame()
         return df
@@ -175,10 +176,11 @@ if page == "本地数据处理":
 
             for f in uploaded_files:
                 try:
+                    from bank_pipeline.loader import safe_read_excel
                     if f.name.endswith(".csv"):
                         df_raw = pd.read_csv(f)
                     else:
-                        df_raw = pd.read_excel(f)
+                        df_raw = safe_read_excel(f)
                     result = auto_parse_dataframe(df_raw)
                     parsed_files.append({
                         "file": f,
@@ -235,10 +237,11 @@ if page == "本地数据处理":
             for tab, f in zip(preview_tabs, all_uploaded):
                 with tab:
                     try:
+                        from bank_pipeline.loader import safe_read_excel
                         if f.name.endswith(".csv"):
                             df_preview = pd.read_csv(f, nrows=5)
                         else:
-                            df_preview = pd.read_excel(f, nrows=5)
+                            df_preview = safe_read_excel(f, nrows=5)
                         st.dataframe(df_preview, width='stretch')
                     except Exception as e:
                         st.error(f"无法读取该文件: {e}")
@@ -251,10 +254,11 @@ if page == "本地数据处理":
             for freq, files in [("daily", daily_files), ("monthly", monthly_files), ("quarterly", quarterly_files)]:
                 for f in files:
                     try:
+                        from bank_pipeline.loader import safe_read_excel
                         if f.name.endswith(".csv"):
                             df = pd.read_csv(f)
                         else:
-                            df = pd.read_excel(f)
+                            df = safe_read_excel(f)
                     except Exception as e:
                         st.error(f"读取 {f.name} 失败: {e}")
                         continue
@@ -618,9 +622,9 @@ elif page == "同花顺 iFinD 宏观数据同步":
         clear_ifind_token,
     )
 
-    # Format dates for iFinD EDB API (YYYY-MM-DD)
-    ifind_start = start_date.strftime("%Y-%m-%d") if start_date else None
-    ifind_end = end_date.strftime("%Y-%m-%d") if end_date else None
+    # Format dates for iFinD EDB API (YYYYMMDD)
+    ifind_start = start_date.strftime("%Y%m%d") if start_date else None
+    ifind_end = end_date.strftime("%Y%m%d") if end_date else None
 
     # ── API 配置卡片 ──────────────────────────────────────
     with st.container(border=True):

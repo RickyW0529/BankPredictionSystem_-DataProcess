@@ -24,7 +24,7 @@ if [ -z "$PYTHON_CMD" ]; then
     exit 1
 fi
 
-PYTHON_VERSION=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")')
+PYTHON_VERSION=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 echo "[1/5] 检测到 Python $PYTHON_VERSION (命令: $PYTHON_CMD)"
 
 # 2. 创建/校验虚拟环境

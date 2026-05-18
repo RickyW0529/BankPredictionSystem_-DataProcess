@@ -16,9 +16,12 @@ def generate_clean_column_name(col_name: str) -> str:
     return clean_name.strip('_')
 
 
-def _read_broken_xlsx(file_path: str) -> pd.DataFrame:
-    """Read xlsx workbook with invalid XML (e.g. corrupted styles.xml) by manually parsing sheet XML."""
-    with zipfile.ZipFile(file_path, 'r') as z:
+def _read_broken_xlsx(file_path_or_buffer) -> pd.DataFrame:
+    """Read xlsx workbook with invalid XML (e.g. corrupted styles.xml) by manually parsing sheet XML.
+
+    Supports both file path (str) and file-like objects (BytesIO).
+    """
+    with zipfile.ZipFile(file_path_or_buffer, 'r') as z:
         shared_strings = []
         try:
             with z.open('xl/sharedStrings.xml') as f:
@@ -89,6 +92,17 @@ def _read_broken_xlsx(file_path: str) -> pd.DataFrame:
                 result.append(row_data)
 
     return pd.DataFrame(result[1:], columns=result[0])
+
+
+def safe_read_excel(file_path_or_buffer, **kwargs) -> pd.DataFrame:
+    """Read Excel with automatic fallback to manual XML parsing for corrupted styles.xml."""
+    try:
+        return pd.read_excel(file_path_or_buffer, **kwargs)
+    except Exception:
+        # Reset buffer position for file-like objects
+        if hasattr(file_path_or_buffer, 'seek'):
+            file_path_or_buffer.seek(0)
+        return _read_broken_xlsx(file_path_or_buffer)
 
 
 def detect_date_column(df: pd.DataFrame, date_keywords: List[str]) -> Optional[str]:
